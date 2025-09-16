@@ -1,0 +1,96 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8"/>
+  <title>Open OSINT Monitor (No-Keys, GitHub Pages)</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <link rel="stylesheet" href="assets/styles.css"/>
+</head>
+<body>
+<div class="wrap">
+  <header class="header">
+    <h1>Open OSINT Monitor</h1>
+    <p class="sub">Live, client-side lookups for any domain using free, no‑login sources. Works on GitHub Pages.</p>
+  </header>
+
+  <section class="card">
+    <form id="search">
+      <div class="grid">
+        <div>
+          <label>Domain</label>
+          <input id="domain" placeholder="example.com" required/>
+        </div>
+        <div>
+          <label>Brand (optional, for lookalikes)</label>
+          <input id="brand" placeholder="example"/>
+        </div>
+        <div class="actions">
+          <button type="submit">Scan</button>
+          <button type="button" class="ghost" id="demo">Demo</button>
+        </div>
+      </div>
+      <p class="muted small">Sources: Cloudflare & Google DoH (DNS), RDAP, ipwho.is (GeoIP/ASN), crt.sh (CT), sonar.omnisint.io (subdomains). No API keys required. Some sources may rate‑limit or be temporarily unavailable.</p>
+    </form>
+  </section>
+
+  <section class="card">
+    <h2>Summary</h2>
+    <div id="summary" class="summary"></div>
+  </section>
+
+  <section class="card">
+    <h2>WHOIS / RDAP</h2>
+    <table class="kv">
+      <tbody id="rdap"></tbody>
+    </table>
+  </section>
+
+  <section class="card">
+    <h2>DNS Records</h2>
+    <div class="grid2">
+      <div>
+        <h3>A / AAAA</h3>
+        <table id="dns-a" class="tbl"></table>
+      </div>
+      <div>
+        <h3>MX</h3>
+        <table id="dns-mx" class="tbl"></table>
+      </div>
+      <div>
+        <h3>NS</h3>
+        <table id="dns-ns" class="tbl"></table>
+      </div>
+      <div>
+        <h3>TXT</h3>
+        <table id="dns-txt" class="tbl"></table>
+      </div>
+      <div>
+        <h3>SPF / DMARC</h3>
+        <table id="mail" class="tbl"></table>
+      </div>
+    </div>
+  </section>
+
+  <section class="card">
+    <h2>IP Geo/ASN (from A records)</h2>
+    <table id="geo" class="tbl"></table>
+  </section>
+
+  <section class="card">
+    <h2>Certificate Transparency (crt.sh)</h2>
+    <table id="ct" class="tbl"></table>
+  </section>
+
+  <section class="card">
+    <h2>Subdomains (sonar.omnisint.io)</h2>
+    <table id="subs" class="tbl"></table>
+  </section>
+
+  <footer>
+    <p class="muted small">For defensive security and monitoring only. Don’t abuse public endpoints. Results are best‑effort; verify before action.</p>
+  </footer>
+</div>
+
+<script src="assets/app.js"></script>
+</body>
+</html>
