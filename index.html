@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
   <meta charset="utf-8"/>
-  <title>Open OSINT Monitor (No-Keys, GitHub Pages)</title>
+  <title>Open OSINT Monitor (No Keys, GitHub Pages)</title>
   <meta name="viewport" content="width=device-width, initial-scale=1"/>
   <link rel="stylesheet" href="assets/styles.css"/>
 </head>
@@ -10,43 +10,53 @@
 <div class="wrap">
   <header class="header">
     <h1>Open OSINT Monitor</h1>
-    <p class="sub">Live, client-side lookups for any domain using free, no‑login sources. Works on GitHub Pages.</p>
+    <p class="sub">Live, client-side lookups for any domain or brand using free, no-login sources. Works entirely on GitHub Pages.</p>
   </header>
 
   <section class="card">
     <form id="search">
       <div class="grid">
         <div>
-          <label>Domain</label>
-          <input id="domain" placeholder="example.com" required/>
+          <label>Domain (FQDN, e.g. <code>example.com</code>)</label>
+          <input id="domain" placeholder="example.com"/>
         </div>
         <div>
-          <label>Brand (optional, for lookalikes)</label>
-          <input id="brand" placeholder="example"/>
+          <label>Brand (no TLD, e.g. <code>dell</code>)</label>
+          <input id="brand" placeholder="dell"/>
         </div>
         <div class="actions">
           <button type="submit">Scan</button>
           <button type="button" class="ghost" id="demo">Demo</button>
+          <button type="button" id="downloadJson" class="ghost">Download JSON</button>
+          <button type="button" id="downloadCsv" class="ghost">Download CSV</button>
         </div>
       </div>
-      <p class="muted small">Sources: Cloudflare & Google DoH (DNS), RDAP, ipwho.is (GeoIP/ASN), crt.sh (CT), sonar.omnisint.io (subdomains). No API keys required. Some sources may rate‑limit or be temporarily unavailable.</p>
+      <p class="muted small">Tip: You can scan with <strong>Domain</strong>, <strong>Brand</strong>, or both. Brand-only mode checks many TLDs (e.g., <code>dell.in</code>, <code>dell.ru</code>, <code>dell.xyz</code>) and CT logs for lookalikes.</p>
+      <p class="muted small">Sources: Cloudflare & Google DoH (DNS), RDAP, ipwho.is (GeoIP/ASN), crt.sh (CT), sonar.omnisint.io (subdomains). No API keys required; modest rate-limits apply.</p>
     </form>
   </section>
 
   <section class="card">
     <h2>Summary</h2>
     <div id="summary" class="summary"></div>
+    <div id="progress" class="muted small"></div>
   </section>
 
   <section class="card">
-    <h2>WHOIS / RDAP</h2>
+    <h2>Brand TLD Sweep</h2>
+    <p class="muted small">Auto-checks common TLDs like <code>.com .net .org .in .ru .xyz</code> (and more). Shows registration, DNS mail posture, and geo.</p>
+    <table id="tld" class="tbl"></table>
+  </section>
+
+  <section class="card">
+    <h2>WHOIS / RDAP (for Domain)</h2>
     <table class="kv">
       <tbody id="rdap"></tbody>
     </table>
   </section>
 
   <section class="card">
-    <h2>DNS Records</h2>
+    <h2>DNS Records (for Domain)</h2>
     <div class="grid2">
       <div>
         <h3>A / AAAA</h3>
@@ -72,22 +82,22 @@
   </section>
 
   <section class="card">
-    <h2>IP Geo/ASN (from A records)</h2>
+    <h2>IP Geo/ASN (A records)</h2>
     <table id="geo" class="tbl"></table>
   </section>
 
   <section class="card">
-    <h2>Certificate Transparency (crt.sh)</h2>
+    <h2>Certificate Transparency (CT) – Lookalikes</h2>
     <table id="ct" class="tbl"></table>
   </section>
 
   <section class="card">
-    <h2>Subdomains (sonar.omnisint.io)</h2>
+    <h2>Subdomains</h2>
     <table id="subs" class="tbl"></table>
   </section>
 
   <footer>
-    <p class="muted small">For defensive security and monitoring only. Don’t abuse public endpoints. Results are best‑effort; verify before action.</p>
+    <p class="muted small">Defensive OSINT only. Respect public endpoints. Results are best-effort and may be incomplete.</p>
   </footer>
 </div>
 

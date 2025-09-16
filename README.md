@@ -1,33 +1,20 @@
-# Open OSINT Monitor (GitHub Pages, no keys)
+# Open OSINT Monitor – GitHub Pages (No Keys)
 
-A static website that performs live OSINT checks for any domain using **only free, no‑login APIs** that support CORS, so it can run entirely in the browser on **GitHub Pages**.
+This version supports **brand-only scans** (TLD sweep) and **download as JSON/CSV**. It works entirely on GitHub Pages using only free, no-login sources.
 
-### What it shows
-- **WHOIS/RDAP**: registrar, registration dates, status, privacy/proxy
-- **DNS**: A/AAAA/MX/NS/TXT, SPF, DMARC presence (via DNS‑over‑HTTPS)
-- **IP Geo/ASN/ISP**: for the first few A records (ipwho.is)
-- **Certificate Transparency** lookups via crt.sh
-- **Subdomains** via sonar.omnisint.io
-- **Risk badges**: quick heuristic scoring (no ML keys required)
+## Features
+- Brand TLD sweep (e.g., `dell.in`, `dell.ru`, `dell.xyz`, … across ~60 popular TLDs)
+- Domain RDAP / WHOIS, DNS (A/AAAA/MX/NS/TXT), SPF/DMARC
+- GeoIP/ASN/ISP for first A record (ipwho.is)
+- Certificate Transparency (crt.sh) lookalike harvesting
+- Subdomains (sonar.omnisint.io)
+- Risk badges + progress indicator
+- Download JSON/CSV (client-side)
 
-> Note: All calls are client‑side. Some providers may rate‑limit or change CORS behaviour.
+## Publish
+Upload the folder contents to a GitHub repo and enable **Settings → Pages → Deploy from a branch**.
 
-### Quick start (GitHub Pages)
-1. Create a new repo, upload this folder (files inside, not a ZIP).
-2. In **Settings → Pages**, select **Deploy from a branch**, choose your default branch and **/root**.
-3. Open the Pages URL and search for any domain.
-
-### No server / no keys
-- DNS: Cloudflare DoH (`cloudflare-dns.com`) and Google DoH (`dns.google`) – both allow CORS for JSON.
-- RDAP: `rdap.org` (with a CORS fallback through `r.jina.ai` content mirror).
-- GeoIP: `ipwho.is` allows CORS.
-- CT: `crt.sh` does not provide CORS; we read JSON through `r.jina.ai` (best‑effort).
-- Subdomains: `sonar.omnisint.io` (community endpoint; may be rate‑limited). Fallback via `r.jina.ai`.
-
-### Legal/Ethical
-This tool is for **defensive security** and monitoring of domains you own or have permission to assess. Respect rate limits and terms of use.
-
-### Customize
-- Add columns in `assets/app.js` (rendering functions).
-- Style in `assets/styles.css`.
-- If you later want PDF exports or persistence/history, add a backend (Render/Worker) or GitHub Actions workflow to commit JSON snapshots.
+## Notes
+- Public endpoints impose rate limits; scans of many TLDs take time and may be partial.
+- `crt.sh` and some RDAP servers don’t set CORS; the code includes a read-only `r.jina.ai` fallback.
+- This is for defensive security. Always verify results before action.
