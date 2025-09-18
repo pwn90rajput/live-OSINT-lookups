@@ -45,6 +45,9 @@
 </head>
 <body>
   <div class="wrap">
+    <div id="errorBanner" class="card" style="display:none;background:#2a1131;border:1px solid #6d1a4a;color:#ffd7e1">
+      <b>Script error:</b> <span id="errorText"></span>
+    </div>
     <header>
       <h1>OSINT Monitor — Full Dashboard (Patched+)</h1>
       <p class="sub">Client-side recon. Adds fixed SSL Labs polling, Open Ports, and 10 extra details: DNSSEC, DMARC policy, HSTS, security headers, HTTP status, size, title/meta, sitemap/robots stats, redirects, CDN hint, favicon mmh3 hash.</p>
@@ -167,6 +170,20 @@
 
 <script>
 // ===== Utilities =====
+function showError(e){
+  try{
+    const box = document.getElementById('errorBanner');
+    const txt = document.getElementById('errorText');
+    if(box && txt){
+      txt.textContent = (e && (e.message || e.toString())) || 'unknown';
+      box.style.display = 'block';
+    }
+  }catch(_){}
+}
+window.addEventListener('error', (ev)=>{ console.error(ev.error||ev.message); showError(ev.error||ev.message); });
+window.addEventListener('unhandledrejection', (ev)=>{ console.error(ev.reason); showError(ev.reason); });
+// (handlers injected)
+
 const $ = (s)=>document.querySelector(s);
 const esc = (s)=> (s??'').toString().replace(/[&<>\"']/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;','\"':'&quot;',\"'\":'&#39;'}[m]));
 const sleep = (ms)=>new Promise(r=>setTimeout(r,ms));
@@ -245,12 +262,18 @@ async function crt(needle){
 
 // ===== Render =====
 function renderTable(sel, headers, rows){
-  const table=$(sel), thead=table.querySelector('thead'), tbody=table.querySelector('tbody');
+  const table=$(sel);
+  if(!table){ console.warn('renderTable: missing', sel); return; }
+  const thead=table.querySelector('thead'), tbody=table.querySelector('tbody');
   if(thead) thead.innerHTML='<tr>'+headers.map(h=>'<th>'+esc(h)+'</th>').join('')+'</tr>';
   if(tbody) tbody.innerHTML= rows.length? rows.map(r=>'<tr>'+r.map(c=>'<td>'+esc(c??'')+'</td>').join('')+'</tr>').join('')
                                          : '<tr><td colspan=\"'+headers.length+'\" class=\"muted\">No data</td></tr>';
 }
-function kv(sel, rows){ $(sel).innerHTML=rows.map(([k,v])=>'<tr><td><b>'+esc(k)+'</b></td><td>'+esc(v??'')+'</td></tr>').join(''); }
+function kv(sel, rows){
+  const el=$(sel);
+  if(!el){ console.warn('kv: missing', sel); return; }
+  el.innerHTML=rows.map(([k,v])=>'<tr><td><b>'+esc(k)+'</b></td><td>'+esc(v??'')+'</td></tr>').join('');
+}
 function badge(type, text){ return '<span class=\"badge '+type+'\">'+esc(text)+'</span>'; }
 function sim(a,b){ a=(a||'').toLowerCase(); b=(b||'').toLowerCase(); const sa=new Set(a), sb=new Set(b); return sa.size&&sb.size? [...sa].filter(x=>sb.has(x)).length / new Set([...sa,...sb]).size : 0; }
 function risk(score){ if(score>=0.75) return badge('bad','HIGH '+score.toFixed(2)); if(score>=0.45) return badge('warn','MEDIUM '+score.toFixed(2)); return badge('good','LOW '+score.toFixed(2)); }
