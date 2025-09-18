@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8"/>
   <meta name="viewport" content="width=device-width, initial-scale=1"/>
-  <title>OSINT Monitor — Full Dashboard (Patched+)</title>
+  <title>OSINT Monitor — Full Dashboard (Patched)</title>
   <style>
     :root { --bg:#0b1020; --card:#0f1a34; --txt:#e7ecff; --muted:#a9b4d6; --accent:#7aa2ff; --good:#1bd760; --warn:#ffbd2e; --bad:#ff5c77; }
     *{box-sizing:border-box}
@@ -40,17 +40,13 @@
     .two{display:grid;grid-template-columns:1fr 1fr;gap:10px}
     @media(max-width:900px){ .two{grid-template-columns:1fr} }
     .mono{font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace; white-space:pre-wrap}
-    .caps{letter-spacing:.5px;text-transform:uppercase;font-size:12px;color:var(--muted)}
   </style>
 </head>
 <body>
   <div class="wrap">
-    <div id="errorBanner" class="card" style="display:none;background:#2a1131;border:1px solid #6d1a4a;color:#ffd7e1">
-      <b>Script error:</b> <span id="errorText"></span>
-    </div>
     <header>
-      <h1>OSINT Monitor — Full Dashboard (Patched+)</h1>
-      <p class="sub">Client-side recon. Adds fixed SSL Labs polling, Open Ports, and 10 extra details: DNSSEC, DMARC policy, HSTS, security headers, HTTP status, size, title/meta, sitemap/robots stats, redirects, CDN hint, favicon mmh3 hash.</p>
+      <h1>OSINT Monitor — Full Dashboard (Patched)</h1>
+      <p class="sub">Live client-side recon. Uses DoH, RDAP, CT logs, multi-source subdomains, SSL Labs, IP & BGP intel, public emails (improved), favicon hash, typosquats, branding, socials, takeover hints, and more. No keys; rate-limits handled.</p>
     </header>
 
     <section class="card">
@@ -61,7 +57,7 @@
         </div>
         <div>
           <label for="brand">Brand (no TLD)</label>
-          <input id="brand" type="text" placeholder="example" inputmode="text" spellcheck="false" />
+          <input id="brand" type="text" placeholder="dell" inputmode="text" spellcheck="false" />
         </div>
         <button type="submit" id="scanBtn">Scan</button>
         <button type="button" id="demo" class="ghost">Demo</button>
@@ -119,10 +115,21 @@
     </section>
 
     <section class="card">
+      <h2>Certificate Transparency — Lookalikes</h2>
+      <table id="ct" class="tbl"><thead></thead><tbody></tbody></table>
+      <div class="small muted" id="censys_cert"></div>
+    </section>
+
+    <section class="card">
+      <h2>Subdomains (Multi-source)</h2>
+      <div class="small muted" id="sub_counts"></div>
+      <table id="subs" class="tbl"><thead></thead><tbody></tbody></table>
+    </section>
+
+    <section class="card">
       <h2>SSL Labs (Grade)</h2>
       <div id="sslStatus" class="muted small"></div>
       <table id="sslTable" class="tbl"><thead></thead><tbody></tbody></table>
-      <div class="small muted">If rate-limited by the API, we keep polling with exponential backoff. When unavailable, we show last-known details only.</div>
     </section>
 
     <section class="card">
@@ -154,12 +161,6 @@
       </div>
     </section>
 
-    <section class="card">
-      <h2>Extra 10 Details</h2>
-      <table id="extra" class="tbl"><thead></thead><tbody></tbody></table>
-      <div class="caps">Includes: DNSSEC, DMARC policy, HSTS, CSP, X-Frame-Options, X-Content-Type-Options, Referrer-Policy, HTTP status, page size, title, meta description length, sitemap/robots stats, apex→www redirect check, CDN hint, IPv6 support.</div>
-    </section>
-
     <footer class="card">
       <div class="row">
         <span class="pill">Sources: Cloudflare/Google DoH, rdap.org, ipwho.is, ipinfo.io, api.bgpview.io, internetdb.shodan.io, urlscan.io, crt.sh, sonar.omnisint, jldc.me, RapidDNS, HackerTarget, BufferOver.run, ThreatMiner, OTX, ViewDNS, DNSlytics, CentralOps, Censys (HTML), WebArchive CDX, Clearbit, DuckDuckGo HTML, GitHub HTML search</span>
@@ -170,30 +171,65 @@
 
 <script>
 // ===== Utilities =====
-console.log('OSINT dashboard loaded');
-document.addEventListener('DOMContentLoaded', ()=>{ try{ const sum=document.getElementById('summary'); if(sum){ sum.innerHTML='<span class="badge good">UI loaded</span>'; } }catch(e){} });
-function showError(e){
-  try{
-    const box = document.getElementById('errorBanner');
-    const txt = document.getElementById('errorText');
-    if(box && txt){
-      txt.textContent = (e && (e.message || e.toString())) || 'unknown';
-      box.style.display = 'block';
-    }
-  }catch(_){}
-}
-window.addEventListener('error', (ev)=>{ console.error(ev.error||ev.message); showError(ev.error||ev.message); });
-window.addEventListener('unhandledrejection', (ev)=>{ console.error(ev.reason); showError(ev.reason); });
-// (handlers injected)
-
 const $ = (s)=>document.querySelector(s);
-const esc = (s)=> (s??'').toString().replace(/[&<>\"']/g, m => ({
-  '&':'&amp;',
-  '<':'&lt;',
-  '>':'&gt;',
-  '"':'&quot;',
-  "'":"&#39;"
-}[m])); } }
+const esc = (s)=> (s??'').toString().replace(/[&<>\"']/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;','\"':'&quot;',\"'\":'&#39;'}[m]));
+const sleep = (ms)=>new Promise(r=>setTimeout(r,ms));
+const escapeRE=(s)=>s.replace(/[.*+?^${}()|[\\]\\\\]/g,'\\\\$&');
+let LAST = {}, RUNNING=false;
+
+function setProgress(txt){ $('#progress').innerHTML = txt? '<span class="spinner"></span> '+esc(txt) : ''; }
+function setBusy(b){ RUNNING=b; $('#scanBtn').disabled=b; $('#demo').disabled=b; }
+
+function downloadJSON(obj, name='osint_results.json'){
+  try{ const blob = new Blob([JSON.stringify(obj,null,2)], {type:'application/json'});
+    const a=document.createElement('a'); a.href=URL.createObjectURL(blob); a.download=name; document.body.appendChild(a); a.click(); URL.revokeObjectURL(a.href); a.remove();
+  }catch(e){ alert('Could not download JSON'); }
+}
+function toCSV(rows, headers){
+  const all=[headers,...rows];
+  return all.map(r=>r.map(x=>{ const s=(x??'').toString(); return /[\",\\n]/.test(s)? '\"'+s.replace(/\"/g,'\"\"')+'\"' : s; }).join(',')).join('\\n');
+}
+function downloadCSV(rows, headers, name='tld_sweep.csv'){
+  try{ const blob = new Blob([toCSV(rows, headers)], {type:'text/csv'});
+    const a=document.createElement('a'); a.href=URL.createObjectURL(blob); a.download=name; document.body.appendChild(a); a.click(); URL.revokeObjectURL(a.href); a.remove();
+  }catch(e){ alert('Could not download CSV'); }
+}
+
+// Robust JSON fetch with CORS-free mirror
+async function getJSON(url){
+  try{
+    const r = await fetch(url, {headers:{'accept':'application/json'}});
+    if(r.ok){ const ct=r.headers.get('content-type')||''; if(ct.includes('application/json')) return await r.json(); return JSON.parse(await r.text()); }
+  }catch(e){}
+  try{
+    const proxy = 'https://r.jina.ai/http/' + url.replace(/^https?:\\/\\//,'');
+    const r2 = await fetch(proxy); if(!r2.ok) throw 0;
+    const txt2 = await r2.text();
+    const safe = txt2.trim().split(/\\n(?=\\{)/).length>1 ? '['+txt2.trim().split(/\\n(?=\\{)/).join(',')+']' : txt2;
+    return JSON.parse(safe);
+  }catch(e){ throw new Error('Fetch failed: '+url); }
+}
+// TEXT (HTML) via mirror
+async function getText(url){
+  try{ const proxy='https://r.jina.ai/http/' + url.replace(/^https?:\\/\\//,''); const r=await fetch(proxy); if(!r.ok) return ''; return await r.text(); }
+  catch(e){ return ''; }
+}
+
+// ===== DoH / helpers =====
+async function doh(name, type='A'){
+  const cf='https://cloudflare-dns.com/dns-query?name='+encodeURIComponent(name)+'&type='+encodeURIComponent(type);
+  try{ const r=await fetch(cf,{headers:{'accept':'application/dns-json'}}); if(!r.ok) throw 0; const j=await r.json(); return (j.Answer||[]).map(a=>a.data); }
+  catch(_){
+    try{ const gg='https://dns.google/resolve?name='+encodeURIComponent(name)+'&type='+encodeURIComponent(type);
+      const r2=await fetch(gg,{headers:{'accept':'application/dns-json'}}); if(!r2.ok) return []; const j2=await r2.json(); return (j2.Answer||[]).map(a=>a.data);
+    }catch(e){ return []; }
+  }
+}
+const dmarcFrom=(arr)=> (arr||[]).find(t=>t.includes('v=DMARC1'))||null;
+const spfFrom=(arr)=> (arr||[]).find(t=>t.includes('v=spf1'))||null;
+
+// ===== Core data sources =====
+async function rdap(domain){ try{ return await getJSON('https://rdap.org/domain/'+encodeURIComponent(domain)); }catch(e){ return {}; } }
 async function geo(ip){ try{ const r=await fetch('https://ipwho.is/'+encodeURIComponent(ip)); if(!r.ok) return {}; return r.json(); }catch(e){ return {}; } }
 async function ipinfo(ip){ try{ return await getJSON('https://ipinfo.io/'+encodeURIComponent(ip)+'/json'); }catch(e){ return {}; } }
 async function bgpview(ip){ try{ return await getJSON('https://api.bgpview.io/ip/'+encodeURIComponent(ip)); }catch(e){ return {}; } }
@@ -213,18 +249,12 @@ async function crt(needle){
 
 // ===== Render =====
 function renderTable(sel, headers, rows){
-  const table=$(sel);
-  if(!table){ console.warn('renderTable: missing', sel); return; }
-  const thead=table.querySelector('thead'), tbody=table.querySelector('tbody');
+  const table=$(sel), thead=table.querySelector('thead'), tbody=table.querySelector('tbody');
   if(thead) thead.innerHTML='<tr>'+headers.map(h=>'<th>'+esc(h)+'</th>').join('')+'</tr>';
   if(tbody) tbody.innerHTML= rows.length? rows.map(r=>'<tr>'+r.map(c=>'<td>'+esc(c??'')+'</td>').join('')+'</tr>').join('')
                                          : '<tr><td colspan=\"'+headers.length+'\" class=\"muted\">No data</td></tr>';
 }
-function kv(sel, rows){
-  const el=$(sel);
-  if(!el){ console.warn('kv: missing', sel); return; }
-  el.innerHTML=rows.map(([k,v])=>'<tr><td><b>'+esc(k)+'</b></td><td>'+esc(v??'')+'</td></tr>').join('');
-}
+function kv(sel, rows){ $(sel).innerHTML=rows.map(([k,v])=>'<tr><td><b>'+esc(k)+'</b></td><td>'+esc(v??'')+'</td></tr>').join(''); }
 function badge(type, text){ return '<span class=\"badge '+type+'\">'+esc(text)+'</span>'; }
 function sim(a,b){ a=(a||'').toLowerCase(); b=(b||'').toLowerCase(); const sa=new Set(a), sb=new Set(b); return sa.size&&sb.size? [...sa].filter(x=>sb.has(x)).length / new Set([...sa,...sb]).size : 0; }
 function risk(score){ if(score>=0.75) return badge('bad','HIGH '+score.toFixed(2)); if(score>=0.45) return badge('warn','MEDIUM '+score.toFixed(2)); return badge('good','LOW '+score.toFixed(2)); }
@@ -235,7 +265,7 @@ async function sweepBrand(brand){
   const targets=TLDS.map(t=>brand+'.'+t); const rows=[]; let done=0; const batch=6;
   async function worker(list){
     for(const d of list){
-      setProgress('Brand sweep '+(++done)+'/'+targets.length+': '+d);
+      setProgress(`Brand sweep ${++done}/${targets.length}: ${d}`);
       let A=[],MX=[]; try{A=await doh(d,'A');}catch{} try{MX=await doh(d,'MX');}catch{}
       let created='', registrar=''; try{ const r=await rdap(d); const ev=r.events||[]; created=(ev.find(e=>e.eventAction==='registration')||{}).eventDate||''; registrar=(r.registrar&&(r.registrar.name||r.registrar.email))||''; }catch{}
       let country='',asn='',isp=''; if(A&&A[0]){ try{ const g=await geo(A[0]); country=g.country||''; asn=g.connection?('AS'+g.connection.asn):(g.asn||''); isp=g.connection?.isp||g.isp||''; }catch{} }
@@ -255,13 +285,13 @@ async function scanDomain(domain){
   try{A=await doh(domain,'A');}catch{} try{AAAA=await doh(domain,'AAAA');}catch{} try{MX=await doh(domain,'MX');}catch{}
   try{NS=await doh(domain,'NS');}catch{} try{TXT=await doh(domain,'TXT');}catch{} try{DMARCtxt=await doh('_dmarc.'+domain,'TXT');}catch{}
   const SPF=spfFrom(TXT), DMARC=dmarcFrom(DMARCtxt);
-  renderTable('#dns',[\"Type\",\"Values\"],[
+  renderTable('#dns',['Type','Values'],[
     ['A / AAAA',[...(A||[]),...(AAAA||[])].join('\\n')],
     ['MX',(MX||[]).join('\\n')],
     ['NS',(NS||[]).join('\\n')],
     ['TXT',(TXT||[]).join('\\n')],
   ]);
-  renderTable('#mail',[\"Control\",\"Value\"],[
+  renderTable('#mail',['Control','Value'],[
     ['SPF', SPF||'Missing'],
     ['DMARC', DMARC?'Present':'Missing'],
     ['DMARC TXT', DMARC||'—'],
@@ -275,9 +305,9 @@ async function scanDomain(domain){
   for(const ent of (r.entities||[])){ const va=ent.vcardArray && ent.vcardArray[1] || [];
     for(const it of va){ if(Array.isArray(it)&&it[0]==='org'){ const org=(it[3]||'').toString().toLowerCase(); if(/privacy|proxy|guard/.test(org)) privacy=true; } }
   }
-  kv('#rdap', [[\"Registrar\", registrar], [\"Registered\", created], [\"Last changed\", changed], [\"Status\", status], [\"Privacy/Proxy\", privacy?'Yes':'No']]);
+  kv('#rdap', [['Registrar', registrar], ['Registered', created], ['Last changed', changed], ['Status', status], ['Privacy/Proxy', privacy?'Yes':'No']]);
   // IP Intel
-  const rows=[[\"IP\",\"Geo (ipwho.is)\",\"ASN/Org (BGPView)\",\"Shodan InternetDB\"]];
+  const rows=[['IP','Geo (ipwho.is)','ASN/Org (BGPView)','Shodan InternetDB']];
   for(const ip of (A||[]).slice(0,5)){
     let g={}, b={}, s={};
     try{g=await geo(ip);}catch{} try{b=await bgpview(ip);}catch{} try{s=await shodanInternetDB(ip);}catch{}
@@ -288,7 +318,7 @@ async function scanDomain(domain){
     rows.push([ip, geoTxt, bgpTxt, shodanTxt]);
   }
   renderTable('#ipintel', rows.shift(), rows);
-  return {A,AAAA,MX,created,DMARC,registrar,TXT,rdap:r,privacy};
+  return {A,MX,created,DMARC,registrar,TXT,rdap:r};
 }
 
 // ===== ViewDNS / DNSlytics helpers (HTML snapshots) =====
@@ -296,9 +326,9 @@ async function viewdnsRecords(domain){
   try{
     const html=await getText('https://viewdns.info/dnsrecord/?domain='+encodeURIComponent(domain));
     const rows=[...html.matchAll(/<tr>\\s*<td>([A-Z]+)<\\/td>\\s*<td>(.*?)<\\/td>/gi)].map(m=>[m[1], m[2].replace(/<[^>]+>/g,'')]);
-    renderTable('#dns_viewdns',[\"Type\",\"Value\"], rows);
+    renderTable('#dns_viewdns',['Type','Value'], rows);
     return rows;
-  }catch(e){ renderTable('#dns_viewdns',[\"Type\",\"Value\"],[]); return []; }
+  }catch(e){ renderTable('#dns_viewdns',['Type','Value'],[]); return []; }
 }
 async function dnslyticsMail(domain){
   try{
@@ -307,9 +337,9 @@ async function dnslyticsMail(domain){
     const spf=[...html.matchAll(/<td>SPF<\\/td>\\s*<td>(.*?)<\\/td>/gi)].map(m=>['SPF', m[1].replace(/<[^>]+>/g,'')]);
     const dmarc=[...html.matchAll(/<td>DMARC<\\/td>\\s*<td>(.*?)<\\/td>/gi)].map(m=>['DMARC', m[1].replace(/<[^>]+>/g,'')]);
     const rows=[...mx,...spf,...dmarc];
-    renderTable('#mail_dnslytics',[\"Control\",\"Value\"], rows);
+    renderTable('#mail_dnslytics',['Control','Value'], rows);
     return rows;
-  }catch(e){ renderTable('#mail_dnslytics',[\"Control\",\"Value\"],[]); return []; }
+  }catch(e){ renderTable('#mail_dnslytics',['Control','Value'],[]); return []; }
 }
 
 // ===== Raw WHOIS, history, dossier =====
@@ -319,9 +349,9 @@ async function whoisRaw(domain){
     const pre = (html.match(/<pre[^>]*id=\"registrarData\"[^>]*>([\\s\\S]*?)<\\/pre>/i) || html.match(/<pre[^>]*id=\"registryData\"[^>]*>([\\s\\S]*?)<\\/pre>/i) || [])[1] || '';
     const text=pre.replace(/<br\\s*\\/?>(?=\\s*\\n?)/gi,'\\n').replace(/<[^>]+>/g,'').trim();
     const lines=text? text.split('\\n').slice(0,40):[];
-    renderTable('#whois',[\"WHOIS (first 40 lines)\"], lines.map(l=>[l]));
+    renderTable('#whois',['WHOIS (first 40 lines)'], lines.map(l=>[l]));
     return text;
-  }catch(e){ renderTable('#whois',[\"WHOIS\"],[]); return ''; }
+  }catch(e){ renderTable('#whois',['WHOIS'],[]); return ''; }
 }
 async function whoisHistory(domain){
   try{
@@ -350,7 +380,7 @@ async function scanCT(needle, domain){
   const names=await crt(needle);
   const cleaned=(names||[]).filter(n=>!domain || n!==domain);
   const rows=cleaned.map(n=>[n, sim(n,needle).toFixed(3)]).sort((a,b)=>parseFloat(b[1])-parseFloat(a[1])).slice(0,200);
-  renderTable('#ct',[\"Name\",\"Similarity\"],rows);
+  renderTable('#ct',['Name','Similarity'],rows);
   return rows;
 }
 async function censysCerts(domain){
@@ -394,32 +424,32 @@ async function enumerateSubdomains(domain){
   // Resolve first A for up to N
   setProgress('Resolving A records for subdomains…');
   const targets=list.slice(0,300); let i=0; const out=Array(targets.length); const workers=8;
-  async function w(){ while(i<targets.length){ const idx=i++; const h=targets[idx].host; let A=[]; try{ A=await doh(h,'A'); }catch{} out[idx]=[h,(A||[])[0]||'',targets[idx].sources.join(', ')]; setProgress('Subdomain DNS '+(idx+1)+'/'+targets.length); } }
+  async function w(){ while(i<targets.length){ const idx=i++; const h=targets[idx].host; let A=[]; try{ A=await doh(h,'A'); }catch{} out[idx]=[h,(A||[])[0]||'',targets[idx].sources.join(', ')]; setProgress(`Subdomain DNS ${idx+1}/${targets.length}`); } }
   await Promise.all(Array.from({length:workers}, w));
-  renderTable('#subs',[\"Subdomain\",\"First A\",\"Sources\"], out);
+  renderTable('#subs',['Subdomain','First A','Sources'], out);
   return out;
 }
 
-// ===== SSL Labs (improved polling) =====
+// ===== SSL Labs =====
 async function sslLabs(domain){
-  $('#sslStatus').innerHTML='Starting SSL Labs scan…'; renderTable('#sslTable',[\"IP\",\"Grade\",\"Status\"],[]);
-  let tries=0, started=false, delay=4000;
-  while(tries<35){
+  $('#sslStatus').innerHTML='Starting SSL Labs scan…'; renderTable('#sslTable',['IP','Grade','Status'],[]);
+  let tries=0, started=false;
+  while(tries<25){
     tries++;
     try{
       const url='https://api.ssllabs.com/api/v3/analyze?host='+encodeURIComponent(domain)+'&all=done'+(started?'&startNew=off':'&startNew=on');
       const j=await getJSON(url);
       const st=j.status||'UNKNOWN'; $('#sslStatus').innerHTML='SSL Labs: '+esc(st)+' ('+tries+')';
-      if(st==='READY' && Array.isArray(j.endpoints)){ const rows=j.endpoints.map(ep=>[ep.ipAddress||'', ep.grade||'', ep.statusMessage||'']); renderTable('#sslTable',[\"IP\",\"Grade\",\"Status\"],rows); $('#sslStatus').innerHTML='SSL Labs: READY'; return rows; }
-      if(st==='ERROR' || st==='DNS'){ $('#sslStatus').innerHTML='SSL Labs: '+esc(st)+' — service unavailable or host not reachable'; return []; }
-    }catch(e){ $('#sslStatus').innerHTML='SSL Labs: polling… ('+tries+')'; }
-    started=true; await sleep(delay); delay = Math.min(15000, Math.round(delay*1.25));
+      if(st==='READY' && Array.isArray(j.endpoints)){ const rows=j.endpoints.map(ep=>[ep.ipAddress||'', ep.grade||'', ep.statusMessage||'']); renderTable('#sslTable',['IP','Grade','Status'],rows); $('#sslStatus').innerHTML='SSL Labs: READY'; return rows; }
+      if(st==='ERROR' || st==='DNS'){ $('#sslStatus').innerHTML='SSL Labs: '+esc(st); return []; }
+    }catch(e){}
+    started=true; await sleep(6000);
   }
-  $('#sslStatus').innerHTML='SSL Labs: no result after extended polling (likely rate-limited).';
+  $('#sslStatus').innerHTML='SSL Labs: Timed out / no result';
   return [];
 }
 
-// ===== Public Emails (improved) =====
+// ===== Public Emails (improved relevance) =====
 const COMMON_PORTS={25:'smtp',53:'dns',80:'http',110:'pop3',123:'ntp',143:'imap',389:'ldap',443:'https',465:'smtps',514:'syslog',587:'submission',631:'ipp',636:'ldaps',853:'dot',993:'imaps',995:'pop3s',1433:'mssql',1521:'oracle',2049:'nfs',2083:'cpanel',2087:'whm',2089:'whm',2181:'zookeeper',2375:'docker',2376:'dockers',27017:'mongodb',27018:'mongodb',3306:'mysql',3389:'rdp',4000:'webhooks',4040:'spark',4369:'epmd',5000:'flask',5432:'postgres',5601:'kibana',5672:'amqp',5900:'vnc',5985:'winrm',5986:'winrms',6379:'redis',6443:'kubeapi',7001:'weblogic',7002:'weblogic',7077:'spark',8000:'http-alt',8008:'http-alt',8080:'http-proxy',8081:'http-alt',8088:'hadoop',8443:'https-alt',8500:'consul',9000:'sentry',9200:'elasticsearch',9300:'es-internal',11211:'memcached'};
 
 function extractEmails(text){ const re=/\\b[A-Z0-9._%+-]+@[A-Z0-9.-]+\\.[A-Z]{2,}\\b/gi; return [...new Set((text.match(re)||[]))]; }
@@ -430,14 +460,21 @@ async function gatherPublicEmails(domain, txtRecords, rdapObj){
   const base='https://'+domain;
   const pages=['/','.well-known/security.txt','/security.txt','/contact','/contact-us','/contacts','/about','/team','/careers','/support','/help','/legal','/privacy','/terms','/impressum','/robots.txt','/sitemap.xml'];
   const found=new Set();
+  // DMARC rua/ruf
   for(const t of (txtRecords||[])){ const m=t.match(/ru[af]=mailto:([^,\\s]+)/gi); if(m){ m.forEach(s=>found.add(s.split(':').pop())); } }
+  // SOA RNAME
   try{ const soa=await doh(domain,'SOA'); if(soa&&soa[0]){ const parts=soa[0].split(' '); if(parts[1]){ const rname=parts[1].replace(/\\.$/,'').replace(/\\./g,'@'); if(/@/.test(rname)) found.add(rname); } } }catch{}
+  // RDAP entity emails
   rdapEmails(rdapObj||{}).forEach(e=>found.add(e));
+  // Site pages
   for(const p of pages){ const html=await getText(base.replace(/\\/$/,'')+p); if(!html) continue; extractEmails(html).forEach(e=>found.add(e)); const mailtos=[...html.matchAll(/mailto:([^\"'>\\s]+)/gi)].map(m=>m[1].split('?')[0]); mailtos.forEach(e=>found.add(e)); }
+  // GitHub code search (best-effort via mirror)
   try{ const gh=await getText('https://github.com/search?q=%40'+encodeURIComponent(domain)+'&type=code'); extractEmails(gh).forEach(e=>found.add(e)); }catch{}
+  // Basic public web search page (DuckDuckGo HTML)
   try{ const ddg=await getText('https://duckduckgo.com/html/?q='+encodeURIComponent('@'+domain)); extractEmails(ddg).forEach(e=>found.add(e)); }catch{}
+  // Filter to relevant domain emails only, remove junk
   const list=[...found].filter(e=>relatedToDomain(e.toLowerCase(), domain)).sort();
-  renderTable('#emails',[\"Email\"], list.map(e=>[e]));
+  renderTable('#emails',['Email'], list.map(e=>[e]));
   return list;
 }
 
@@ -473,7 +510,7 @@ async function findSocials(domain){
   const uniq=[...new Set(links)];
   uniq.forEach(u=>{ let n='Other'; if(/linkedin/i.test(u)) n='LinkedIn'; else if(/twitter|x\\.com/i.test(u)) n='Twitter/X';
     else if(/facebook/i.test(u)) n='Facebook'; else if(/youtube/i.test(u)) n='YouTube'; else if(/instagram/i.test(u)) n='Instagram'; rows.push([n,u]); });
-  renderTable('#social',[\"Network\",\"URL\"], rows);
+  renderTable('#social',['Network','URL'], rows);
   return rows;
 }
 
@@ -482,10 +519,15 @@ function dnstwistCandidates(domain){
   const [label, ...rest]=domain.split('.'); const tld=rest.join('.');
   const kbd={'a':'qwsz','b':'vghn','c':'xdfv','d':'ersfx','e':'wsdfr','f':'rtdgc','g':'ftyhb','h':'gyujn','i':'ujko','j':'huikm','k':'jiol,','l':'kop;','m':'njk','n':'bhjm','o':'iklp','p':'ol;','q':'wa','r':'edft','s':'awedx','t':'rfgy','u':'yhji','v':'cfgb','w':'qas','x':'zsdc','y':'tugh','z':'xsa'};
   const out=new Set();
+  // omission
   for(let i=0;i<label.length;i++) out.add(label.slice(0,i)+label.slice(i+1));
+  // transposition
   for(let i=0;i<label.length-1;i++) out.add(label.slice(0,i)+label[i+1]+label[i]+label.slice(i+2));
+  // replacement (adjacent)
   for(let i=0;i<label.length;i++){ const c=label[i].toLowerCase(); (kbd[c]||'').split('').forEach(r=> out.add(label.slice(0,i)+r+label.slice(i+1))); }
+  // duplication
   for(let i=0;i<label.length;i++) out.add(label.slice(0,i)+label[i]+label[i]+label.slice(i+1));
+  // hyphenation
   for(let i=1;i<label.length;i++) out.add(label.slice(0,i)+'-'+label.slice(i));
   return [...out].filter(s=>s && s!==label).map(s=>s+'.'+tld);
 }
@@ -505,7 +547,7 @@ async function typosAndTakeover(domain){
   }
   await Promise.all(Array.from({length:workers}, w));
   rows.sort((a,b)=>a[0].localeCompare(b[0]));
-  renderTable('#typos',[\"Domain\",\"First A\",\"CNAME\",\"Hint\"], rows);
+  renderTable('#typos',['Domain','First A','CNAME','Hint'], rows);
   return rows;
 }
 
@@ -538,46 +580,21 @@ async function wayback(domain){
   }
 }
 
-// mmh3 hash for base64 favicon
-function mmh3(data){
-  let h = 0x9747b28c|0;
-  for (let i=0;i<data.length;i++){
-    let k = data.charCodeAt(i);
-    k = Math.imul(k, 0xcc9e2d51);
-    k = (k << 15) | (k >>> 17);
-    k = Math.imul(k, 0x1b873593);
-    h ^= k;
-    h = (h << 13) | (h >>> 19);
-    h = Math.imul(h, 5) + 0xe6546b64;
-  }
-  h ^= data.length;
-  h ^= h >>> 16;
-  h = Math.imul(h, 0x85ebca6b);
-  h ^= h >>> 13;
-  h = Math.imul(h, 0xc2b2ae35);
-  h ^= h >>> 16;
-  return (h>>>0).toString();
-}
-
+// Simple SHA-256 favicon hash (note: Shodan uses mmh3; this is a placeholder)
 async function faviconHash(domain){
   try{
     const url = `https://${domain}/favicon.ico`;
-    const b64 = await getText('https://r.jina.ai/http/' + url.replace(/^https?:\\/\\//,''));
-    let base64 = '';
-    if (/^[A-Za-z0-9+/=]+$/.test(b64.trim())) base64 = b64.trim();
-    else {
-      try{
-        const res = await fetch(url);
-        const buf = await res.arrayBuffer();
-        base64 = btoa(String.fromCharCode(...new Uint8Array(buf)));
-      }catch{}
-    }
-    let mm = base64 ? mmh3(base64) : '';
-    renderTable('#favhash', ['Type','Value'], [['mmh3 (Shodan)', mm||'n/a'], ['URL', url]]);
-    return {algo:'mmh3-base64', hash:mm, url};
+    const res = await fetch(url, {mode:'no-cors'});
+    // If blocked, fall back to proxy
+    const buf = res && res.ok ? await res.arrayBuffer() :
+      await (await fetch('https://r.jina.ai/http/' + url.replace(/^https?:\\/\\//,''))).arrayBuffer();
+    const digest = await crypto.subtle.digest('SHA-256', buf);
+    const hex = [...new Uint8Array(digest)].map(b=>b.toString(16).padStart(2,'0')).join('');
+    renderTable('#favhash', ['Type','Value'], [['SHA-256', hex], ['URL', url]]);
+    return {algo:'sha256', hash:hex, url};
   }catch(e){
     renderTable('#favhash', ['Type','Value'], [['Error','Could not fetch favicon']]);
-    return {algo:'mmh3-base64', hash:'', url:''};
+    return {algo:'sha256', hash:'', url:''};
   }
 }
 
@@ -598,71 +615,6 @@ async function openPorts(ips){
   return rows;
 }
 
-// ===== Extra 10 details =====
-async function extraDetails(domain, dscan){
-  const rows = [];
-  const baseHTTPS = 'https://'+domain;
-  const baseHTTP  = 'http://'+domain;
-  let headersTxt = await getText('https://api.hackertarget.com/httpheaders/?q='+encodeURIComponent(domain));
-  const hdrs = {};
-  headersTxt.split('\\n').forEach(line=>{
-    const m = line.match(/^(.*?):\\s*(.*)$/);
-    if(m){ hdrs[m[1].toLowerCase()] = m[2]; }
-  });
-  const html = await getText(baseHTTPS);
-  const title = (html.match(/<title>([^<]*)<\\/title>/i)||[])[1]||'';
-  const metaDesc = (html.match(/<meta\\s+name=[\"']description[\"'][^>]*content=[\"']([^\"']*)/i)||[])[1]||'';
-  const robots = await getText(baseHTTPS+'/robots.txt');
-  const sitemap = await getText(baseHTTPS+'/sitemap.xml');
-  const disallow = (robots.match(/^Disallow:/gmi)||[]).length;
-  const sitemaps = (robots.match(/^Sitemap:/gmi)||[]).length + (sitemap ? 1:0);
-  const httpPage = await getText(baseHTTP);
-  const httpsPage = html;
-  const redirectsToHTTPS = !!httpsPage && (!!httpPage);
-  const cname = (await doh(domain,'CNAME'))[0]||'';
-  const server = hdrs['server']||'';
-  let cdn = '';
-  if(/cloudflare/i.test(server) || /cloudflare/i.test(cname)) cdn='Cloudflare';
-  else if(/akamai/i.test(server) || /akamai|edgekey|edgesuite/i.test(cname)) cdn='Akamai';
-  else if(/fastly/i.test(server) || /fastly/i.test(cname)) cdn='Fastly';
-  else if(/amazon|cloudfront/i.test(server) || /cloudfront|amazonaws/i.test(cname)) cdn='AWS/CloudFront';
-  const haveDS = (await doh(domain,'DS')).length>0;
-  const haveDNSKEY = (await doh(domain,'DNSKEY')).length>0;
-  const dmarcTxt = dscan.DMARC || '';
-  const dmarcPolicy = (dmarcTxt.match(/\\bp=([a-z]+)/i)||[])[1]||'';
-  const hsts = hdrs['strict-transport-security']||'';
-  const csp = hdrs['content-security-policy']||'';
-  const xfo = hdrs['x-frame-options']||'';
-  const xcto = hdrs['x-content-type-options']||'';
-  const refpol = hdrs['referrer-policy']||'';
-  let status = ''; let size='';
-  const firstLine = headersTxt.split('\\n')[0]||'';
-  const m = firstLine.match(/^HTTP\\/[0-9.]+\\s+(\\d+)/i); if(m) status = m[1];
-  size = hdrs['content-length'] || (html ? String(html.length) : '');
-  const ipv6 = (dscan.AAAA||[]).length>0;
-
-  const push = (k,v)=>rows.push([k, String(v||'—')]);
-  push('DNSSEC (DS/DNSKEY)', (haveDS||haveDNSKEY)? 'Present':'Missing');
-  push('DMARC policy (p=)', dmarcPolicy || 'n/a');
-  push('HSTS', hsts || 'Not sent');
-  push('CSP', csp ? 'Present' : 'Missing');
-  push('X-Frame-Options', xfo || 'Missing');
-  push('X-Content-Type-Options', xcto || 'Missing');
-  push('Referrer-Policy', refpol || 'Missing');
-  push('HTTP status (HTTPS)', status || 'n/a');
-  push('Homepage size (bytes)', size || 'n/a');
-  push('Page title', title || 'n/a');
-  push('Meta description length', metaDesc ? metaDesc.length : '0');
-  push('Sitemap entries (rough)', sitemaps);
-  push('robots.txt Disallow count', disallow);
-  push('Apex/WWW redirect check', redirectsToHTTPS ? 'OK/HTTPS' : 'Unknown');
-  push('CDN hint', cdn || 'n/a');
-  push('IPv6 (AAAA)', ipv6 ? 'Yes' : 'No');
-
-  renderTable('#extra', ['Key','Value'], rows);
-  return rows;
-}
-
 // ===== Summary badges =====
 function renderSummary({spf, dmarc, ssl, subsCount, portsCount, privacy}){
   const parts = [];
@@ -680,6 +632,7 @@ async function run(domain, brand){
   setBusy(true); setProgress('Starting…');
   const results = {domain, brand, when: new Date().toISOString()};
   try{
+    // Domain basics
     const d = await scanDomain(domain);
     results.domainScan = d;
 
@@ -691,6 +644,7 @@ async function run(domain, brand){
       domainDossier(domain).then(x=>results.domainDossier = x),
     ]);
 
+    // Recon in parallel
     const [subs, ssl, ct, censys, wb, fav] = await Promise.all([
       enumerateSubdomains(domain),
       sslLabs(domain),
@@ -706,20 +660,23 @@ async function run(domain, brand){
     results.wayback = wb;
     results.favicon = fav;
 
+    // Branding & socials
     const [branding, socials] = await Promise.all([fetchBranding(domain), findSocials(domain)]);
     results.branding = branding;
     results.socials = socials;
 
+    // Typosquats & takeover
     results.typos = await typosAndTakeover(domain);
 
+    // Open ports from Shodan InternetDB
     const ports = await openPorts(d.A || []);
     results.openPorts = ports;
 
+    // Brand TLD sweep
     const tlds = brand ? await sweepBrand(brand) : [];
     results.tldSweep = tlds;
 
-    results.extra = await extraDetails(domain, d);
-
+    // Summary
     const sslGrade = (results.ssl && results.ssl[0] && results.ssl[0][1]) || '';
     renderSummary({
       spf: !!(d.TXT && d.TXT.some(t=>/^v=spf1/i.test(t))),
@@ -727,7 +684,7 @@ async function run(domain, brand){
       ssl: {grade: sslGrade},
       subsCount: results.subdomains ? results.subdomains.length : 0,
       portsCount: ports.reduce((n,row)=> n + ((row[1]||'').split(',').filter(Boolean).length), 0),
-      privacy: d.privacy
+      privacy: $('#rdap').textContent.toLowerCase().includes('privacy')
     });
 
     LAST = results;
@@ -763,5 +720,3 @@ $('#dlcsv').addEventListener('click', ()=>{
   downloadCSV(rows, headers, 'tld_sweep.csv');
 });
 </script>
-</body>
-</html>
