@@ -109,8 +109,15 @@
     </section>
 
     <section class="card">
-      <h2>Subdomains</h2>
+      <h2>Subdomains (Multi-source)</h2>
       <table id="subs" class="tbl"><thead></thead><tbody></tbody></table>
+    </section>
+
+    <!-- New: SSL Labs -->
+    <section class="card">
+      <h2>SSL Labs (Grade)</h2>
+      <div id="sslStatus" class="muted small"></div>
+      <table id="sslTable" class="tbl"><thead></thead><tbody></tbody></table>
     </section>
 
     <!-- New: Public Emails -->
@@ -132,16 +139,16 @@
       <table id="social" class="tbl"><thead></thead><tbody></tbody></table>
     </section>
 
-    <!-- New: OSINT Toolbox (Quick Links) -->
+    <!-- OSINT Toolbox stays (links only for tools that need accounts) -->
     <section class="card">
       <h2>OSINT Toolbox (Quick Links)</h2>
       <div id="toolbox" class="toolbox"></div>
-      <p class="muted small">Note: These are direct links to free/community tools. Some may require a free sign-in.</p>
+      <p class="muted small">Some tools require a free login; everything else is fetched above with no keys.</p>
     </section>
 
     <footer class="card">
       <div class="row">
-        <span class="pill">Sources: Cloudflare & Google DoH, rdap.org, ipwho.is, crt.sh (via read-only mirror), sonar.omnisint.io</span>
+        <span class="pill">Sources: Cloudflare & Google DoH, rdap.org, ipwho.is, crt.sh (via read-only mirror), sonar.omnisint.io, jldc.me (Anubis), RapidDNS, HackerTarget, BufferOver.run, ThreatMiner, AlienVault OTX, SSL Labs API</span>
         <span class="pill">No API keys • No login • Static hosting</span>
       </div>
     </footer>
@@ -151,9 +158,9 @@
 // ===== Utilities =====
 const $ = (s)=>document.querySelector(s);
 const esc = (s)=> (s??'').toString().replace(/[&<>"']/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m]));
-
-// CSV/JSON downloads
+const sleep = (ms)=>new Promise(r=>setTimeout(r,ms));
 let LAST = {};
+
 function downloadJSON(obj, name='osint_results.json'){
   try{
     const blob = new Blob([JSON.stringify(obj,null,2)], {type:'application/json'});
@@ -182,10 +189,10 @@ async function getJSON(url){
     if(r.ok){
       const ct = r.headers.get('content-type')||'';
       if(ct.includes('application/json')) return await r.json();
-      const txt = await r.text(); return JSON.parse(txt);
+      return JSON.parse(await r.text());
     }
   }catch(e){}
-  try{ // read-only mirror fallback
+  try{
     const proxy = 'https://r.jina.ai/http://' + url.replace(/^https?:\/\//,'');
     const r2 = await fetch(proxy); if(!r2.ok) throw 0;
     const txt2 = await r2.text();
@@ -193,7 +200,6 @@ async function getJSON(url){
     return JSON.parse(safe);
   }catch(e){ throw new Error('Fetch failed: '+url); }
 }
-
 // Fetch TEXT (HTML) via read-only mirror (handles CORS)
 async function getText(url){
   try{
@@ -219,7 +225,7 @@ async function doh(name, type='A'){
 const dmarcFrom=(arr)=> (arr||[]).find(t=>t.includes('v=DMARC1'))||null;
 const spfFrom=(arr)=> (arr||[]).find(t=>t.includes('v=spf1'))||null;
 
-// RDAP / Geo / CT / Subdomains
+// RDAP / Geo / CT
 async function rdap(domain){ try{ return await getJSON('https://rdap.org/domain/'+encodeURIComponent(domain)); }catch(e){ return {}; }}
 async function geo(ip){ try{ const r=await fetch('https://ipwho.is/'+encodeURIComponent(ip)); if(!r.ok) return {}; return r.json(); }catch(e){ return {}; } }
 async function crt(needle){
@@ -234,13 +240,8 @@ async function crt(needle){
     return out;
   }catch(e){ return []; }
 }
-async function subdomains(domain){
-  const url='https://sonar.omnisint.io/subdomains/'+encodeURIComponent(domain);
-  try{ const r=await fetch(url); if(r.ok) return r.json(); throw 0; }
-  catch(_){ try{ return await getJSON(url); } catch(e){ return []; } }
-}
 
-// Render helpers
+// ===== Render helpers =====
 function renderTable(sel, headers, rows){
   const table=$(sel); const thead=table.querySelector('thead'); const tbody=table.querySelector('tbody');
   if(thead) thead.innerHTML = '<tr>'+headers.map(h=>'<th>'+esc(h)+'</th>').join('')+'</tr>';
@@ -251,9 +252,9 @@ function badge(type, text){ return '<span class="badge '+type+'">'+esc(text)+'</
 function sim(a,b){ a=(a||'').toLowerCase(); b=(b||'').toLowerCase(); const sa=new Set(a), sb=new Set(b); return sa.size&&sb.size? [...sa].filter(x=>sb.has(x)).length / new Set([...sa,...sb]).size : 0; }
 function risk(score){ if(score>=0.75) return badge('bad','HIGH '+score.toFixed(2)); if(score>=0.45) return badge('warn','MEDIUM '+score.toFixed(2)); return badge('good','LOW '+score.toFixed(2)); }
 const TLDS = ["com","net","org","io","co","ai","app","dev","site","online","info","biz","xyz","cloud","shop","in","ru","de","fr","it","es","nl","pl","se","no","fi","dk","eu","uk","co.uk","com.au","ca","jp","kr","vn","sg","hk","tw","br","mx","ar","za","tr","ua","cz","sk","ro","hu","pt","ie","ch","at","be","gr","lt","lv","ee","il","sa","ae","qa","kw","nz"];
+const escapeRE = (s)=>s.replace(/[.*+?^${}()|[\]\\]/g,'\\$&');
 
 // ===== Scan logic =====
-let RESULTS = {};
 let RUNNING = false;
 function setProgress(txt){ $('#progress').innerHTML = txt? '<span class="spinner"></span> '+esc(txt) : ''; }
 function setBusy(b){ RUNNING=b; $('#scanBtn').disabled=b; $('#demo').disabled=b; }
@@ -311,70 +312,160 @@ async function scanDomain(domain){
     for(const it of va){ if(Array.isArray(it) && it[0]==='org'){ const org=(it[3]||'').toString().toLowerCase(); if(/privacy|proxy|guard/.test(org)) privacy=true; } }
   }
   kv('#rdap', [['Registrar', registrar], ['Registered', created], ['Last changed', changed], ['Status', status], ['Privacy/Proxy', privacy?'Yes':'No']]);
+  // geo
   const rows=[['IP','Country','ASN','ISP']];
   for(const ip of (A||[]).slice(0,5)){
     try{ const g=await geo(ip); rows.push([ip, g.country||'', g.connection?('AS'+g.connection.asn):(g.asn||''), g.connection?.isp||g.isp||'']); }
     catch(e){ rows.push([ip,'','','']); }
   }
   renderTable('#geo', rows.shift(), rows);
-  const subs = await subdomains(domain);
-  renderTable('#subs', ['Subdomain'], (subs||[]).map(s=>[s]));
   return {A,MX,created,DMARC,registrar,TXT};
 }
 
-async function scanCT(needle, domain){
-  const names = await crt(needle);
-  const cleaned = (names||[]).filter(n => !domain || n!==domain);
-  const rows = cleaned.map(n=>[n, sim(n, needle).toFixed(3)]).sort((a,b)=> parseFloat(b[1])-parseFloat(a[1])).slice(0,200);
-  renderTable('#ct', ['Name','Similarity'], rows);
-  return rows;
+// ---- Multi-source Subdomain Enumeration ----
+function uniqHosts(arr, domain){
+  const out=new Set();
+  const re = new RegExp(`([a-z0-9_-]+\\.)+${escapeRE(domain)}`,'gi');
+  for(const s of (arr||[])){
+    if(!s) continue;
+    const t = (''+s).toLowerCase();
+    if(t===domain || t.endsWith('.'+domain)) out.add(t);
+    else{
+      const m = t.match(re);
+      if(m) m.forEach(v=>out.add(v.toLowerCase()));
+    }
+  }
+  return [...out];
+}
+async function subdomains_omnisint(domain){
+  try{ const r=await fetch('https://sonar.omnisint.io/subdomains/'+encodeURIComponent(domain)); if(r.ok) return r.json(); }catch(e){}
+  try{ return await getJSON('https://sonar.omnisint.io/subdomains/'+encodeURIComponent(domain)); }catch(e){ return []; }
+}
+async function subdomains_anubis(domain){
+  try{ return await getJSON('https://jldc.me/anubis/subdomains/'+encodeURIComponent(domain)); }catch(e){ return []; }
+}
+async function subdomains_rapiddns(domain){
+  try{
+    const html = await getText('https://rapiddns.io/subdomain/'+encodeURIComponent(domain)+'?full=1');
+    return uniqHosts([html], domain);
+  }catch(e){ return []; }
+}
+async function subdomains_hackertarget(domain){
+  try{
+    const txt = await getText('https://api.hackertarget.com/hostsearch/?q='+encodeURIComponent(domain));
+    return uniqHosts(txt.split('\n').map(l=>l.split(',')[0]), domain);
+  }catch(e){ return []; }
+}
+async function subdomains_bufferover(domain){
+  try{
+    const j = await getJSON('https://dns.bufferover.run/dns?q='+encodeURIComponent(domain));
+    const a = [].concat(j.FDNS_A||[], j.RDNS||[], j.FDNS_CNAME||[]);
+    const hosts = a.map(s=> (s.split(',')[1]||s)).filter(Boolean);
+    return uniqHosts(hosts, domain);
+  }catch(e){ return []; }
+}
+async function subdomains_crt(domain){
+  try{ const names=await crt(domain); return names.filter(n=>n.endsWith('.'+domain)); }catch(e){ return []; }
+}
+async function subdomains_threatminer(domain){
+  try{ const j=await getJSON('https://api.threatminer.org/v2/domain.php?q='+encodeURIComponent(domain)+'&rt=5'); return uniqHosts(j.results||[], domain); }catch(e){ return []; }
+}
+async function subdomains_otx(domain){
+  try{ const j=await getJSON('https://otx.alienvault.com/api/v1/indicators/domain/'+encodeURIComponent(domain)+'/passive_dns'); return uniqHosts((j.passive_dns||[]).map(x=>x.hostname), domain); }catch(e){ return []; }
 }
 
-function normalizeDomain(d){ return d.replace(/^https?:\/\//,'').replace(/\/$/,'').toLowerCase(); }
-function normalizeBrand(b){ return b.replace(/[^a-z0-9-]/gi,'').toLowerCase(); }
+async function enumerateSubdomains(domain){
+  setProgress('Enumerating subdomains (multi-source)…');
+  const sources = {
+    omnisint: subdomains_omnisint(domain),
+    anubis: subdomains_anubis(domain),
+    rapiddns: subdomains_rapiddns(domain),
+    hackertarget: subdomains_hackertarget(domain),
+    bufferover: subdomains_bufferover(domain),
+    crtsh: subdomains_crt(domain),
+    threatminer: subdomains_threatminer(domain),
+    otx: subdomains_otx(domain),
+  };
+  const results = await Promise.all(Object.entries(sources).map(async([k,p])=>[k, await p.catch(()=>[])]));
+  // Merge -> host -> sources
+  const map = new Map();
+  for(const [src, arr] of results){
+    for(const h of arr){
+      if(!map.has(h)) map.set(h,new Set());
+      map.get(h).add(src);
+    }
+  }
+  const list = [...map.entries()].map(([host,set])=>({host, sources:[...set].sort()})).sort((a,b)=>a.host.localeCompare(b.host));
+  // Resolve first A for up to 200 hosts
+  setProgress('Resolving A records for subdomains…');
+  const resolveTargets = list.slice(0,200);
+  let i=0; const out = Array(resolveTargets.length);
+  const workers = 8;
+  async function w(){
+    while(i<resolveTargets.length){
+      const idx=i++; const h=resolveTargets[idx].host;
+      let A=[]; try{ A=await doh(h,'A'); }catch(e){}
+      out[idx]=[h, (A||[])[0]||'', resolveTargets[idx].sources.join(', ')];
+      setProgress('Subdomain DNS '+(idx+1)+'/'+resolveTargets.length);
+    }
+  }
+  await Promise.all(Array.from({length:workers}, w));
+  renderTable('#subs',['Subdomain','First A','Sources'], out);
+  return out;
+}
 
-// ===== Add-ons =====
+// ---- SSL Labs (free API) ----
+async function sslLabs(domain){
+  $('#sslStatus').innerHTML = 'Starting SSL Labs scan…';
+  renderTable('#sslTable',['IP','Grade','Status'],[]);
+  let tries=0, started=false;
+  while(tries<25){
+    tries++;
+    try{
+      const url = 'https://api.ssllabs.com/api/v3/analyze?host='
+        + encodeURIComponent(domain)
+        + '&all=done' + (started? '&startNew=off' : '&startNew=on');
+      const j = await getJSON(url);
+      const st = j.status || 'UNKNOWN';
+      $('#sslStatus').innerHTML = 'SSL Labs: '+esc(st)+' ('+tries+')';
+      if(st==='READY' && Array.isArray(j.endpoints)){
+        const rows = j.endpoints.map(ep=>[ep.ipAddress||'', ep.grade||'', ep.statusMessage||'']);
+        renderTable('#sslTable',['IP','Grade','Status'], rows);
+        $('#sslStatus').innerHTML = 'SSL Labs: READY';
+        return rows;
+      }
+      if(st==='ERROR' || st==='DNS'){ $('#sslStatus').innerHTML='SSL Labs: '+esc(st); return []; }
+    }catch(e){ /* ignore and retry */ }
+    started=true; await sleep(6000);
+  }
+  $('#sslStatus').innerHTML = 'SSL Labs: Timed out / no result';
+  return [];
+}
 
-// Public email discovery
+// ===== Add-ons: Emails / Branding / Social =====
 function extractEmails(text){ const re=/[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/gi; return [...new Set((text.match(re)||[]))]; }
 async function gatherPublicEmails(domain, txtRecords){
   setProgress('Gathering public emails…');
   const base='https://'+domain;
   const pages=['/','.well-known/security.txt','/security.txt','/contact','/about','/support','/legal','/privacy','/impressum'];
   const found=new Set();
-
-  for(const t of (txtRecords||[])){ // DMARC rua/ruf
-    const m = t.match(/ru[af]=mailto:([^,\s]+)/gi);
-    if(m){ m.forEach(s=>found.add(s.split(':').pop())); }
-  }
-  try{ // SOA rname
-    const soa = await doh(domain,'SOA');
-    if(soa && soa[0]){
-      const parts=soa[0].split(' ');
-      if(parts[1]){ const rname=parts[1].replace(/\.$/,'').replace(/\./g,'@'); if(/@/.test(rname)) found.add(rname); }
-    }
-  }catch(e){}
-
+  for(const t of (txtRecords||[])){ const m=t.match(/ru[af]=mailto:([^,\s]+)/gi); if(m){ m.forEach(s=>found.add(s.split(':').pop())); } }
+  try{ const soa=await doh(domain,'SOA'); if(soa && soa[0]){ const p=soa[0].split(' '); if(p[1]){ const rname=p[1].replace(/\.$/,'').replace(/\./g,'@'); if(/@/.test(rname)) found.add(rname); } } }catch(e){}
   for(const p of pages){
     const html = await getText(base.replace(/\/$/,'')+p);
     if(!html) continue;
     extractEmails(html).forEach(e=>found.add(e));
-    const mailtos = [...html.matchAll(/mailto:([^"'>\s]+)/gi)].map(m=>m[1].split('?')[0]);
-    mailtos.forEach(e=>found.add(e));
+    const mailtos=[...html.matchAll(/mailto:([^"'>\s]+)/gi)].map(m=>m[1].split('?')[0]); mailtos.forEach(e=>found.add(e));
   }
   const list=[...found].sort();
   renderTable('#emails',['Email'], list.map(e=>[e]));
   return list;
 }
 
-// Branding: icons & og:image + Clearbit fallback
 async function fetchBranding(domain){
   setProgress('Discovering branding…');
-  const base='https://'+domain;
-  const html = await getText(base);
-  const out = [];
-  const logosEl = $('#logos'); if(logosEl) logosEl.innerHTML='';
-
+  const base='https://'+domain; const html = await getText(base);
+  const out=[]; const logos=$('#logos'); if(logos) logos.innerHTML='';
   if(html){
     const iconHrefs = [...html.matchAll(/<link[^>]+rel=["'](?:icon|shortcut icon|apple-touch-icon)["'][^>]*>/gi)]
       .map(m=>m[0]).map(tag=> (tag.match(/href=["']([^"']+)/i)||[])[1]).filter(Boolean)
@@ -382,22 +473,16 @@ async function fetchBranding(domain){
     const og = (html.match(/property=["']og:image["'][^>]*content=["']([^"']+)/i)||[])[1];
     if(og){ try{ iconHrefs.push(new URL(og, base).href); }catch(e){ iconHrefs.push(og); } }
     const imgs=[...new Set(iconHrefs)];
-    imgs.forEach(src=>{ const img=new Image(); img.src=src; img.alt='logo'; $('#logos')?.appendChild(img); out.push(['Icon',src]); });
+    imgs.forEach(src=>{ const img=new Image(); img.src=src; img.alt='logo'; logos?.appendChild(img); out.push(['Icon',src]); });
   }
-  const cb='https://logo.clearbit.com/'+domain; // fallback
-  out.push(['Clearbit', cb]);
-  const cbImg=new Image(); cbImg.src=cb; cbImg.alt='clearbit-logo'; $('#logos')?.appendChild(cbImg);
-
-  const tbody = $('#branding')?.querySelector('tbody'); const thead=$('#branding')?.querySelector('thead');
-  if(thead) thead.innerHTML='<tr><th>Source</th><th>URL</th></tr>';
-  if(tbody) tbody.innerHTML = out.map(([label,url])=>'<tr><td>'+esc(label)+'</td><td><a href="'+esc(url)+'" target="_blank" rel="noreferrer">'+esc(url)+'</a></td></tr>').join('');
+  const cb='https://logo.clearbit.com/'+domain; out.push(['Clearbit',cb]); const cbimg=new Image(); cbimg.src=cb; cbimg.alt='clearbit'; $('#logos')?.appendChild(cbimg);
+  const tb=$('#branding'); tb.querySelector('thead').innerHTML='<tr><th>Source</th><th>URL</th></tr>';
+  tb.querySelector('tbody').innerHTML= out.map(([k,u])=>'<tr><td>'+esc(k)+'</td><td><a target="_blank" rel="noreferrer" href="'+esc(u)+'">'+esc(u)+'</a></td></tr>').join('');
   return out;
 }
-
-// Social profiles from homepage
 async function findSocials(domain){
   setProgress('Finding social profiles…');
-  const base='https://'+domain; const html = await getText(base);
+  const base='https://'+domain; const html=await getText(base);
   const rows=[]; if(!html){ renderTable('#social',["Network","URL"],[]); return []; }
   function grab(re){ return [...new Set((html.match(re)||[]))]; }
   const links = [
@@ -417,15 +502,14 @@ async function findSocials(domain){
     else if(/instagram/i.test(u)) n='Instagram';
     rows.push([n,u]);
   });
-  const t=$('#social'); if(t){ t.querySelector('thead').innerHTML='<tr><th>Network</th><th>URL</th></tr>';
-    t.querySelector('tbody').innerHTML = rows.length? rows.map(r=>'<tr><td>'+esc(r[0])+'</td><td><a href="'+esc(r[1])+'" target="_blank" rel="noreferrer">'+esc(r[1])+'</a></td></tr>').join('') : '<tr><td colspan="2" class="muted">No social links found</td></tr>'; }
+  $('#social').querySelector('thead').innerHTML='<tr><th>Network</th><th>URL</th></tr>';
+  $('#social').querySelector('tbody').innerHTML = rows.length? rows.map(r=>'<tr><td>'+esc(r[0])+'</td><td><a target="_blank" rel="noreferrer" href="'+esc(r[1])+'">'+esc(r[1])+'</a></td></tr>').join('') : '<tr><td colspan="2" class="muted">No social links found</td></tr>';
   return rows;
 }
 
-// OSINT toolbox (quick links)
+// Toolbox (links for tools that need accounts or block CORS)
 function buildToolbox(domain, brand, AIPs){
-  setProgress('Building OSINT toolbox…');
-  const e = encodeURIComponent; const ip = (AIPs && AIPs[0]) || ''; const box = $('#toolbox'); if(!box) return;
+  const e = encodeURIComponent; const ip=(AIPs&&AIPs[0])||''; const box=$('#toolbox'); if(!box) return;
   const cards = [
     { title:'WHOIS Lookup', links:[
       ['ICANN Lookup', `https://lookup.icann.org/en/lookup?name=${e(domain)}`],
@@ -435,14 +519,14 @@ function buildToolbox(domain, brand, AIPs){
     ]},
     { title:'DNS Lookup', links:[
       ['DNSDumpster', `https://dnsdumpster.com/`],
-      ['ViewDNS.info — records', `https://viewdns.info/dnsrecord/?domain=${e(domain)}`],
+      ['ViewDNS — DNS records', `https://viewdns.info/dnsrecord/?domain=${e(domain)}`],
       ['MXToolbox SuperTool', `https://mxtoolbox.com/SuperTool.aspx?domain=${e(domain)}`],
     ]},
     { title:'Historical DNS & Snapshots', links:[
       ['SecurityTrails — history', `https://securitytrails.com/domain/${e(domain)}/history`],
       ['Wayback Machine', `https://web.archive.org/web/*/${e('http://'+domain)}`],
     ]},
-    { title:'Subdomain Enumeration', links:[
+    { title:'Subdomain Enumeration (CLIs)', links:[
       ['Subfinder (GitHub)', 'https://github.com/projectdiscovery/subfinder'],
       ['Amass (GitHub)', 'https://github.com/OWASP/Amass'],
       ['Sublist3r (GitHub)', 'https://github.com/aboul3la/Sublist3r'],
@@ -450,7 +534,7 @@ function buildToolbox(domain, brand, AIPs){
       ['Findomain (GitHub)', 'https://github.com/Findomain/Findomain'],
     ]},
     { title:'SSL/TLS Certificate Analysis', links:[
-      ['SSL Labs Server Test', `https://www.ssllabs.com/ssltest/analyze.html?d=${e(domain)}`],
+      ['SSL Labs (web)', `https://www.ssllabs.com/ssltest/analyze.html?d=${e(domain)}`],
       ['Censys certificates', `https://search.censys.io/certificates?q=${e(domain)}`],
       ['crt.sh', `https://crt.sh/?q=%25${e(domain)}%25`],
     ]},
@@ -460,13 +544,13 @@ function buildToolbox(domain, brand, AIPs){
       [ip ? `AbuseIPDB (${ip})` : 'AbuseIPDB', ip ? `https://www.abuseipdb.com/check/${e(ip)}` : 'https://www.abuseipdb.com/'],
       ['PhishTank search', `https://www.phishtank.com/search.php?search=${e(domain)}&IsSearch=Y`],
     ]},
-    { title:'Web Scraping & Fingerprinting', links:[
+    { title:'Web Tech Fingerprints', links:[
       ['Wappalyzer Lookup', `https://www.wappalyzer.com/lookup/${e(domain)}`],
       ['BuiltWith', `https://builtwith.com/${e(domain)}`],
       ['WhatWeb (GitHub)', 'https://github.com/urbanadventurer/WhatWeb'],
       ['Nikto (GitHub)', 'https://github.com/sullo/nikto'],
     ]},
-    { title:'Email & Social Media OSINT', links:[
+    { title:'Email & Social OSINT', links:[
       ['Hunter.io domain search', `https://hunter.io/domain-search/${e(domain)}`],
       ['EmailHippo tools', 'https://tools.emailhippo.com/'],
       ['Sherlock (GitHub)', 'https://github.com/sherlock-project/sherlock'],
@@ -477,16 +561,10 @@ function buildToolbox(domain, brand, AIPs){
       [ip ? `IP2Location (${ip})` : 'IP2Location', ip ? `https://www.ip2location.com/demo/${e(ip)}` : 'https://www.ip2location.com/'],
       ['MaxMind GeoIP', 'https://dev.maxmind.com/geoip/'],
     ]},
-    { title:'Automation & Frameworks', links:[
-      ['SpiderFoot (GitHub)', 'https://github.com/smicallef/spiderfoot'],
-      ['Maltego Community Edition', 'https://www.maltego.com/'],
-      ['theHarvester (GitHub)', 'https://github.com/laramies/theHarvester'],
-      ['OSINT Framework', 'https://osintframework.com/'],
-    ]},
-    { title:'Logo reuse (manual checks)', links:[
-      ['Google Images: brand logo', `https://www.google.com/search?tbm=isch&q=${e(brand+' logo')}`],
-      ['Bing Images: brand logo', `https://www.bing.com/images/search?q=${e(brand+' logo')}`],
-      ['Yandex Images: brand logo', `https://yandex.com/images/search?text=${e(brand+' logo')}`],
+    { title:'Logo checks (manual)', links:[
+      ['Google Images', `https://www.google.com/search?tbm=isch&q=${e(brand+' logo')}`],
+      ['Bing Images', `https://www.bing.com/images/search?q=${e(brand+' logo')}`],
+      ['Yandex Images', `https://yandex.com/images/search?text=${e(brand+' logo')}`],
     ]},
   ];
   box.innerHTML = cards.map(card=>{
@@ -512,10 +590,10 @@ async function run(){
 
   // reset UI
   $('#summary').innerHTML = '<span class="spinner"></span> Running lookups…';
-  ['#tld','#dns','#mail','#geo','#ct','#subs','#emails','#branding','#social'].forEach(sel=>{
+  ['#tld','#dns','#mail','#geo','#ct','#subs','#emails','#branding','#social','#sslTable'].forEach(sel=>{
     const el=$(sel); if(!el) return; const h=el.querySelector('thead'); const b=el.querySelector('tbody'); if(h) h.innerHTML=''; if(b) b.innerHTML='';
   });
-  $('#rdap').innerHTML=''; $('#logos').innerHTML=''; $('#toolbox').innerHTML=''; setProgress(''); setBusy(true);
+  $('#rdap').innerHTML=''; $('#logos').innerHTML=''; $('#toolbox').innerHTML=''; $('#sslStatus').innerHTML=''; setProgress(''); setBusy(true);
 
   const results = {input:{domain,brand}, startedAt:new Date().toISOString()};
 
@@ -535,6 +613,11 @@ async function run(){
     }
 
     if(domain){
+      // multi-source subdomains
+      await enumerateSubdomains(domain);
+      // SSL Labs
+      await sslLabs(domain);
+      // branding + emails + socials + toolbox
       try{ await fetchBranding(domain); }catch(e){}
       try{ await gatherPublicEmails(domain, (results.domain&&results.domain.TXT)||[]); }catch(e){}
       try{ await findSocials(domain); }catch(e){}
