@@ -170,6 +170,7 @@
 
 <script>
 // ===== Utilities =====
+console.log('OSINT dashboard loaded');
 function showError(e){
   try{
     const box = document.getElementById('errorBanner');
@@ -185,64 +186,13 @@ window.addEventListener('unhandledrejection', (ev)=>{ console.error(ev.reason); 
 // (handlers injected)
 
 const $ = (s)=>document.querySelector(s);
-const esc = (s)=> (s??'').toString().replace(/[&<>\"']/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;','\"':'&quot;',\"'\":'&#39;'}[m]));
-const sleep = (ms)=>new Promise(r=>setTimeout(r,ms));
-const escapeRE=(s)=>s.replace(/[.*+?^${}()|[\\]\\\\]/g,'\\\\$&');
-let LAST = {}, RUNNING=false;
-
-function setProgress(txt){ $('#progress').innerHTML = txt? '<span class=\"spinner\"></span> '+esc(txt) : ''; }
-function setBusy(b){ RUNNING=b; $('#scanBtn').disabled=b; $('#demo').disabled=b; }
-
-function downloadJSON(obj, name='osint_results.json'){
-  try{ const blob = new Blob([JSON.stringify(obj,null,2)], {type:'application/json'});
-    const a=document.createElement('a'); a.href=URL.createObjectURL(blob); a.download=name; document.body.appendChild(a); a.click(); URL.revokeObjectURL(a.href); a.remove();
-  }catch(e){ alert('Could not download JSON'); }
-}
-function toCSV(rows, headers){
-  const all=[headers,...rows];
-  return all.map(r=>r.map(x=>{ const s=(x??'').toString(); return /[\",\\n]/.test(s)? '\"'+s.replace(/\"/g,'\"\"')+'\"' : s; }).join(',')).join('\\n');
-}
-function downloadCSV(rows, headers, name='tld_sweep.csv'){
-  try{ const blob = new Blob([toCSV(rows, headers)], {type:'text/csv'});
-    const a=document.createElement('a'); a.href=URL.createObjectURL(blob); a.download=name; document.body.appendChild(a); a.click(); URL.revokeObjectURL(a.href); a.remove();
-  }catch(e){ alert('Could not download CSV'); }
-}
-
-// Robust JSON fetch with CORS-free mirror
-async function getJSON(url){
-  try{
-    const r = await fetch(url, {headers:{'accept':'application/json'}});
-    if(r.ok){ const ct=r.headers.get('content-type')||''; if(ct.includes('application/json')) return await r.json(); return JSON.parse(await r.text()); }
-  }catch(e){}
-  try{
-    const proxy = 'https://r.jina.ai/http/' + url.replace(/^https?:\\/\\//,'');
-    const r2 = await fetch(proxy); if(!r2.ok) throw 0;
-    const txt2 = await r2.text();
-    const safe = txt2.trim().split(/\\n(?=\\{)/).length>1 ? '['+txt2.trim().split(/\\n(?=\\{)/).join(',')+']' : txt2;
-    return JSON.parse(safe);
-  }catch(e){ throw new Error('Fetch failed: '+url); }
-}
-// TEXT (HTML) via mirror
-async function getText(url){
-  try{ const proxy='https://r.jina.ai/http/' + url.replace(/^https?:\\/\\//,''); const r=await fetch(proxy); if(!r.ok) return ''; return await r.text(); }
-  catch(e){ return ''; }
-}
-
-// ===== DoH / helpers =====
-async function doh(name, type='A'){
-  const cf='https://cloudflare-dns.com/dns-query?name='+encodeURIComponent(name)+'&type='+encodeURIComponent(type);
-  try{ const r=await fetch(cf,{headers:{'accept':'application/dns-json'}}); if(!r.ok) throw 0; const j=await r.json(); return (j.Answer||[]).map(a=>a.data); }
-  catch(_){
-    try{ const gg='https://dns.google/resolve?name='+encodeURIComponent(name)+'&type='+encodeURIComponent(type);
-      const r2=await fetch(gg,{headers:{'accept':'application/dns-json'}}); if(!r2.ok) return []; const j2=await r2.json(); return (j2.Answer||[]).map(a=>a.data);
-    }catch(e){ return []; }
-  }
-}
-const dmarcFrom=(arr)=> (arr||[]).find(t=>t.includes('v=DMARC1'))||null;
-const spfFrom=(arr)=> (arr||[]).find(t=>t.includes('v=spf1'))||null;
-
-// ===== Core data sources =====
-async function rdap(domain){ try{ return await getJSON('https://rdap.org/domain/'+encodeURIComponent(domain)); }catch(e){ return {}; } }
+const esc = (s)=> (s??'').toString().replace(/[&<>\"']/g, m => ({
+  '&':'&amp;',
+  '<':'&lt;',
+  '>':'&gt;',
+  '"':'&quot;',
+  "'":"&#39;"
+}[m])); } }
 async function geo(ip){ try{ const r=await fetch('https://ipwho.is/'+encodeURIComponent(ip)); if(!r.ok) return {}; return r.json(); }catch(e){ return {}; } }
 async function ipinfo(ip){ try{ return await getJSON('https://ipinfo.io/'+encodeURIComponent(ip)+'/json'); }catch(e){ return {}; } }
 async function bgpview(ip){ try{ return await getJSON('https://api.bgpview.io/ip/'+encodeURIComponent(ip)); }catch(e){ return {}; } }
