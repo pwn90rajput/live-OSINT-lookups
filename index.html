@@ -37,13 +37,16 @@
     .pill{border:1px solid #23325a;border-radius:10px;padding:4px 8px}
     a{color:#9ec0ff}
     #logos img{max-height:64px;border-radius:10px;background:#0b1430;padding:6px}
+    .two{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+    @media(max-width:900px){ .two{grid-template-columns:1fr} }
+    .mono{font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace; white-space:pre-wrap}
   </style>
 </head>
 <body>
   <div class="wrap">
     <header>
       <h1>OSINT Monitor — Created with love & Use with Care ( follow me on at Insta @rajputpawanthakur )</h1>
-      <p class="sub">Live client-side lookups for any <b>Domain</b> or <b>Brand</b>. Uses DoH, RDAP, CT logs, GeoIP, multi-source subdomains, SSL Labs, public email scraping (security.txt/DMARC/site pages), logos & social discovery. Works on GitHub Pages.</p>
+      <p class="sub">Live client-side lookups for any <b>Domain</b> or <b>Brand</b>. Uses DoH, RDAP, CT logs, multi-source subdomains, SSL Labs, IP & BGP intel, public emails, favicon hash, typosquats, branding & socials. Free sources; some rate-limits apply.</p>
     </header>
 
     <section class="card">
@@ -63,7 +66,7 @@
           <button type="button" id="dlcsv" class="ghost">Download CSV</button>
         </div>
       </form>
-      <p class="muted small">Tip: <b>Brand-only</b> mode sweeps many TLDs and harvests CT lookalikes. Free sources; rate-limits may apply.</p>
+      <p class="muted small">Brand-only sweeps many TLDs & harvests CT lookalikes. Front-end only; no keys.</p>
     </section>
 
     <section class="card">
@@ -79,31 +82,42 @@
 
     <section class="card">
       <h2>WHOIS / RDAP (Domain)</h2>
-      <table class="kv"><tbody id="rdap"></tbody></table>
+      <div class="two">
+        <table class="kv"><tbody id="rdap"></tbody></table>
+        <table id="whois" class="tbl"><thead></thead><tbody></tbody></table>
+      </div>
     </section>
 
     <section class="card">
       <h2>DNS Records (Domain)</h2>
-      <table id="dns" class="tbl"><thead></thead><tbody></tbody></table>
+      <div class="two">
+        <table id="dns" class="tbl"><thead></thead><tbody></tbody></table>
+        <table id="dns_viewdns" class="tbl"><thead></thead><tbody></tbody></table>
+      </div>
     </section>
 
     <section class="card">
       <h2>Mail Security</h2>
-      <table id="mail" class="tbl"><thead></thead><tbody></tbody></table>
+      <div class="two">
+        <table id="mail" class="tbl"><thead></thead><tbody></tbody></table>
+        <table id="mail_dnslytics" class="tbl"><thead></thead><tbody></tbody></table>
+      </div>
     </section>
 
     <section class="card">
-      <h2>IP Geo / ASN</h2>
-      <table id="geo" class="tbl"><thead></thead><tbody></tbody></table>
+      <h2>IP Geo / ASN & Network Recon</h2>
+      <table id="ipintel" class="tbl"><thead></thead><tbody></tbody></table>
     </section>
 
     <section class="card">
       <h2>Certificate Transparency — Lookalikes</h2>
       <table id="ct" class="tbl"><thead></thead><tbody></tbody></table>
+      <div class="small muted" id="censys_cert"></div>
     </section>
 
     <section class="card">
       <h2>Subdomains (Multi-source)</h2>
+      <div class="small muted" id="sub_counts"></div>
       <table id="subs" class="tbl"><thead></thead><tbody></tbody></table>
     </section>
 
@@ -129,364 +143,337 @@
       <table id="social" class="tbl"><thead></thead><tbody></tbody></table>
     </section>
 
+    <section class="card">
+      <h2>Typosquats & Takeover Hints</h2>
+      <table id="typos" class="tbl"><thead></thead><tbody></tbody></table>
+    </section>
+
+    <section class="card">
+      <h2>Wayback & Favicon Hash</h2>
+      <div class="two">
+        <table id="wayback" class="tbl"><thead></thead><tbody></tbody></table>
+        <table id="favhash" class="tbl"><thead></thead><tbody></tbody></table>
+      </div>
+    </section>
+
     <footer class="card">
       <div class="row">
-        <span class="pill">Sources: Cloudflare/Google DoH, rdap.org, ipwho.is, crt.sh (via mirror), Sonar Omnisint, Anubis (jldc.me), RapidDNS, HackerTarget, BufferOver.run, ThreatMiner, AlienVault OTX, SSL Labs</span>
+        <span class="pill">Sources: DoH (Cloudflare/Google), rdap.org, ipwho.is, ipinfo.io, api.bgpview.io, internetdb.shodan.io, urlscan.io, crt.sh (via mirror), sonar.omnisint, jldc.me (Anubis), RapidDNS, HackerTarget, BufferOver.run, ThreatMiner, OTX, ViewDNS, DNSlytics, CentralOps</span>
         <span class="pill">No API keys • No login • Static hosting</span>
       </div>
     </footer>
   </div>
 
 <script>
-// ========= Utilities =========
+// ===== Utilities =====
 const $ = (s)=>document.querySelector(s);
 const esc = (s)=> (s??'').toString().replace(/[&<>"']/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m]));
 const sleep = (ms)=>new Promise(r=>setTimeout(r,ms));
-let LAST = {};
-let RUNNING = false;
+const escapeRE=(s)=>s.replace(/[.*+?^${}()|[\]\\]/g,'\\$&');
+let LAST = {}, RUNNING=false;
 
 function setProgress(txt){ $('#progress').innerHTML = txt? '<span class="spinner"></span> '+esc(txt) : ''; }
 function setBusy(b){ RUNNING=b; $('#scanBtn').disabled=b; $('#demo').disabled=b; }
 
 function downloadJSON(obj, name='osint_results.json'){
-  try{
-    const blob = new Blob([JSON.stringify(obj,null,2)], {type:'application/json'});
-    const a=document.createElement('a'); a.href=URL.createObjectURL(blob); a.download=name;
-    document.body.appendChild(a); a.click(); URL.revokeObjectURL(a.href); a.remove();
+  try{ const blob = new Blob([JSON.stringify(obj,null,2)], {type:'application/json'});
+    const a=document.createElement('a'); a.href=URL.createObjectURL(blob); a.download=name; document.body.appendChild(a); a.click(); URL.revokeObjectURL(a.href); a.remove();
   }catch(e){ alert('Could not download JSON'); }
 }
 function toCSV(rows, headers){
   const all=[headers,...rows];
-  return all.map(r=>r.map(x=>{
-    const s=(x??'').toString(); return /[",\n]/.test(s)? '"'+s.replace(/"/g,'""')+'"' : s;
-  }).join(',')).join('\n');
+  return all.map(r=>r.map(x=>{ const s=(x??'').toString(); return /[",\n]/.test(s)? '"'+s.replace(/"/g,'""')+'"' : s; }).join(',')).join('\n');
 }
 function downloadCSV(rows, headers, name='tld_sweep.csv'){
-  try{
-    const blob = new Blob([toCSV(rows, headers)], {type:'text/csv'});
-    const a=document.createElement('a'); a.href=URL.createObjectURL(blob); a.download=name;
-    document.body.appendChild(a); a.click(); URL.revokeObjectURL(a.href); a.remove();
+  try{ const blob = new Blob([toCSV(rows, headers)], {type:'text/csv'});
+    const a=document.createElement('a'); a.href=URL.createObjectURL(blob); a.download=name; document.body.appendChild(a); a.click(); URL.revokeObjectURL(a.href); a.remove();
   }catch(e){ alert('Could not download CSV'); }
 }
 
-// Robust JSON fetch with CORS mirror fallback
+// Robust JSON fetch with CORS-free mirror
 async function getJSON(url){
   try{
     const r = await fetch(url, {headers:{'accept':'application/json'}});
-    if(r.ok){
-      const ct = r.headers.get('content-type')||'';
-      if(ct.includes('application/json')) return await r.json();
-      return JSON.parse(await r.text());
-    }
+    if(r.ok){ const ct=r.headers.get('content-type')||''; if(ct.includes('application/json')) return await r.json(); return JSON.parse(await r.text()); }
   }catch(e){}
-  // read-only mirror fallback (works for GETs)
   try{
-    const proxy = 'https://r.jina.ai/http://' + url.replace(/^https?:\/\//,'');
-    const r2 = await fetch(proxy);
-    if(!r2.ok) throw 0;
+    const proxy = 'https://r.jina.ai/http/' + url.replace(/^https?:\/\//,'');
+    const r2 = await fetch(proxy); if(!r2.ok) throw 0;
     const txt2 = await r2.text();
-    // Handle NDJSON-like streams (e.g., crt.sh)
     const safe = txt2.trim().split(/\n(?=\{)/).length>1 ? '['+txt2.trim().split(/\n(?=\{)/).join(',')+']' : txt2;
     return JSON.parse(safe);
-  }catch(e){
-    throw new Error('Fetch failed: '+url);
-  }
+  }catch(e){ throw new Error('Fetch failed: '+url); }
 }
-// TEXT (HTML) via mirror to avoid CORS
+// TEXT (HTML) via mirror
 async function getText(url){
-  try{
-    const proxy = 'https://r.jina.ai/http://' + url.replace(/^https?:\/\//,'');
-    const r = await fetch(proxy); if(!r.ok) return ''; return await r.text();
-  }catch(e){ return ''; }
+  try{ const proxy='https://r.jina.ai/http/' + url.replace(/^https?:\/\//,''); const r=await fetch(proxy); if(!r.ok) return ''; return await r.text(); }
+  catch(e){ return ''; }
 }
 
-// ========= Lookups =========
-// DNS over HTTPS
+// ===== DoH / helpers =====
 async function doh(name, type='A'){
-  const cf = 'https://cloudflare-dns.com/dns-query?name='+encodeURIComponent(name)+'&type='+encodeURIComponent(type);
-  try{
-    const r=await fetch(cf,{headers:{'accept':'application/dns-json'}});
-    if(!r.ok) throw 0;
-    const j=await r.json();
-    return (j.Answer||[]).map(a=>a.data);
-  }catch(_){
-    try{
-      const gg='https://dns.google/resolve?name='+encodeURIComponent(name)+'&type='+encodeURIComponent(type);
-      const r2=await fetch(gg,{headers:{'accept':'application/dns-json'}});
-      if(!r2.ok) return [];
-      const j2=await r2.json();
-      return (j2.Answer||[]).map(a=>a.data);
+  const cf='https://cloudflare-dns.com/dns-query?name='+encodeURIComponent(name)+'&type='+encodeURIComponent(type);
+  try{ const r=await fetch(cf,{headers:{'accept':'application/dns-json'}}); if(!r.ok) throw 0; const j=await r.json(); return (j.Answer||[]).map(a=>a.data); }
+  catch(_){
+    try{ const gg='https://dns.google/resolve?name='+encodeURIComponent(name)+'&type='+encodeURIComponent(type);
+      const r2=await fetch(gg,{headers:{'accept':'application/dns-json'}}); if(!r2.ok) return []; const j2=await r2.json(); return (j2.Answer||[]).map(a=>a.data);
     }catch(e){ return []; }
   }
 }
 const dmarcFrom=(arr)=> (arr||[]).find(t=>t.includes('v=DMARC1'))||null;
 const spfFrom=(arr)=> (arr||[]).find(t=>t.includes('v=spf1'))||null;
 
-// RDAP / Geo
-async function rdap(domain){ try{ return await getJSON('https://rdap.org/domain/'+encodeURIComponent(domain)); }catch(e){ return {}; }}
+// ===== Core data sources =====
+async function rdap(domain){ try{ return await getJSON('https://rdap.org/domain/'+encodeURIComponent(domain)); }catch(e){ return {}; } }
 async function geo(ip){ try{ const r=await fetch('https://ipwho.is/'+encodeURIComponent(ip)); if(!r.ok) return {}; return r.json(); }catch(e){ return {}; } }
-
-// Certificate Transparency (crt.sh)
+async function ipinfo(ip){ try{ return await getJSON('https://ipinfo.io/'+encodeURIComponent(ip)+'/json'); }catch(e){ return {}; } }
+async function bgpview(ip){ try{ return await getJSON('https://api.bgpview.io/ip/'+encodeURIComponent(ip)); }catch(e){ return {}; } }
+async function shodanInternetDB(ip){ try{ return await getJSON('https://internetdb.shodan.io/'+encodeURIComponent(ip)); }catch(e){ return {}; } }
 async function crt(needle){
   const url='https://crt.sh/?q=%25'+encodeURIComponent(needle)+'%25&output=json';
   try{
     const data = await getJSON(url);
-    const set=new Set(), out=[];
-    const arr = Array.isArray(data)? data : (data? [data] : []);
+    const set=new Set(), out=[]; const arr=Array.isArray(data)?data:(data?[data]:[]);
     for(const rec of arr){
       const names=(rec.name_value||'').split('\n').map(s=>s.replace(/^\*\.?/,'').trim().toLowerCase()).filter(Boolean);
-      for(const n of names){ if(!set.has(n)){ set.add(n); out.push(n);} }
+      for(const n of names){ if(!set.has(n)){ set.add(n); out.push(n); } }
     }
     return out;
   }catch(e){ return []; }
 }
 
-// ========= Render helpers =========
+// ===== Render =====
 function renderTable(sel, headers, rows){
-  const table=$(sel); const thead=table.querySelector('thead'); const tbody=table.querySelector('tbody');
-  if(thead) thead.innerHTML = '<tr>'+headers.map(h=>'<th>'+esc(h)+'</th>').join('')+'</tr>';
-  if(tbody) tbody.innerHTML = rows.length? rows.map(r=>'<tr>'+r.map(c=>'<td>'+esc(c??'')+'</td>').join('')+'</tr>').join('') : '<tr><td colspan="'+headers.length+'" class="muted">No data</td></tr>';
+  const table=$(sel), thead=table.querySelector('thead'), tbody=table.querySelector('tbody');
+  if(thead) thead.innerHTML='<tr>'+headers.map(h=>'<th>'+esc(h)+'</th>').join('')+'</tr>';
+  if(tbody) tbody.innerHTML= rows.length? rows.map(r=>'<tr>'+r.map(c=>'<td>'+esc(c??'')+'</td>').join('')+'</tr>').join('')
+                                         : '<tr><td colspan="'+headers.length+'" class="muted">No data</td></tr>';
 }
-function kv(tbodySel, rows){ const el=$(tbodySel); el.innerHTML = rows.map(([k,v])=>'<tr><td><b>'+esc(k)+'</b></td><td>'+esc(v??'')+'</td></tr>').join(''); }
+function kv(sel, rows){ $(sel).innerHTML=rows.map(([k,v])=>'<tr><td><b>'+esc(k)+'</b></td><td>'+esc(v??'')+'</td></tr>').join(''); }
 function badge(type, text){ return '<span class="badge '+type+'">'+esc(text)+'</span>'; }
 function sim(a,b){ a=(a||'').toLowerCase(); b=(b||'').toLowerCase(); const sa=new Set(a), sb=new Set(b); return sa.size&&sb.size? [...sa].filter(x=>sb.has(x)).length / new Set([...sa,...sb]).size : 0; }
 function risk(score){ if(score>=0.75) return badge('bad','HIGH '+score.toFixed(2)); if(score>=0.45) return badge('warn','MEDIUM '+score.toFixed(2)); return badge('good','LOW '+score.toFixed(2)); }
-const TLDS = ["com","net","org","io","co","ai","app","dev","site","online","info","biz","xyz","cloud","shop","in","ru","de","fr","it","es","nl","pl","se","no","fi","dk","eu","uk","co.uk","com.au","ca","jp","kr","vn","sg","hk","tw","br","mx","ar","za","tr","ua","cz","sk","ro","hu","pt","ie","ch","at","be","gr","lt","lv","ee","il","sa","ae","qa","kw","nz"];
-const escapeRE = (s)=>s.replace(/[.*+?^${}()|[\]\\]/g,'\\$&');
+const TLDS=["com","net","org","io","co","ai","app","dev","site","online","info","biz","xyz","cloud","shop","in","ru","de","fr","it","es","nl","pl","se","no","fi","dk","eu","uk","co.uk","com.au","ca","jp","kr","vn","sg","hk","tw","br","mx","ar","za","tr","ua","cz","sk","ro","hu","pt","ie","ch","at","be","gr","lt","lv","ee","il","sa","ae","qa","kw","nz"];
 
-// ========= Brand sweep =========
+// ===== Brand sweep =====
 async function sweepBrand(brand){
-  const targets = TLDS.map(tld=> brand+'.'+tld);
-  const rows=[]; let done=0; const batch=6;
+  const targets=TLDS.map(t=>brand+'.'+t); const rows=[]; let done=0; const batch=6;
   async function worker(list){
     for(const d of list){
-      setProgress('Brand sweep '+(++done)+'/'+targets.length+': '+d);
-      let A=[], MX=[]; try{ A=await doh(d,'A'); }catch(e){} try{ MX=await doh(d,'MX'); }catch(e){}
-      let created='', registrar='';
-      try{ const r = await rdap(d); const ev=(r.events||[]); created=(ev.find(e=>e.eventAction==='registration')||{}).eventDate||''; registrar=(r.registrar && (r.registrar.name||r.registrar.email))||''; }catch(e){}
-      let country='', asn='', isp='';
-      if(A && A[0]){ try{ const g=await geo(A[0]); country=g.country||''; asn=g.connection?('AS'+g.connection.asn):(g.asn||''); isp=g.connection?.isp||g.isp||''; }catch(e){} }
+      setProgress(`Brand sweep ${++done}/${targets.length}: ${d}`);
+      let A=[],MX=[]; try{A=await doh(d,'A');}catch{} try{MX=await doh(d,'MX');}catch{}
+      let created='', registrar=''; try{ const r=await rdap(d); const ev=r.events||[]; created=(ev.find(e=>e.eventAction==='registration')||{}).eventDate||''; registrar=(r.registrar&&(r.registrar.name||r.registrar.email))||''; }catch{}
+      let country='',asn='',isp=''; if(A&&A[0]){ try{ const g=await geo(A[0]); country=g.country||''; asn=g.connection?('AS'+g.connection.asn):(g.asn||''); isp=g.connection?.isp||g.isp||''; }catch{} }
       rows.push([d, created?created.slice(0,10):'', registrar, A&&A.length?'Yes':'No', MX&&MX.length?'Yes':'No', (A&&A[0])||'', country, asn, isp]);
     }
   }
-  const chunks = Array.from({length:batch}, ()=>[]);
-  targets.forEach((t,i)=>chunks[i%batch].push(t));
+  const chunks=Array.from({length:batch},()=>[]); targets.forEach((t,i)=>chunks[i%batch].push(t));
   await Promise.all(chunks.map(worker));
-  rows.sort((a,b)=> (b[4]==='Yes') - (a[4]==='Yes') || (b[1]||'').localeCompare(a[1]||''));
-  renderTable('#tld', ["Domain","Created","Registrar","A?","MX?","First A","Country","ASN","ISP"], rows);
+  rows.sort((a,b)=> (b[4]==='Yes')-(a[4]==='Yes') || (b[1]||'').localeCompare(a[1]||''));
+  renderTable('#tld',["Domain","Created","Registrar","A?","MX?","First A","Country","ASN","ISP"],rows);
   return rows;
 }
 
-// ========= Domain scan =========
+// ===== Domain scan =====
 async function scanDomain(domain){
   let A=[],AAAA=[],MX=[],NS=[],TXT=[],DMARCtxt=[];
-  try{ A = await doh(domain,'A'); }catch(e){}
-  try{ AAAA = await doh(domain,'AAAA'); }catch(e){}
-  try{ MX = await doh(domain,'MX'); }catch(e){}
-  try{ NS = await doh(domain,'NS'); }catch(e){}
-  try{ TXT = await doh(domain,'TXT'); }catch(e){}
-  try{ DMARCtxt = await doh('_dmarc.'+domain,'TXT'); }catch(e){}
-  const SPF = spfFrom(TXT), DMARC = dmarcFrom(DMARCtxt);
-  renderTable('#dns', ['Type','Values'], [
-    ['A / AAAA', [...(A||[]),...(AAAA||[])].join('\n')],
-    ['MX', (MX||[]).join('\n')],
-    ['NS', (NS||[]).join('\n')],
-    ['TXT', (TXT||[]).join('\n')],
+  try{A=await doh(domain,'A');}catch{} try{AAAA=await doh(domain,'AAAA');}catch{} try{MX=await doh(domain,'MX');}catch{}
+  try{NS=await doh(domain,'NS');}catch{} try{TXT=await doh(domain,'TXT');}catch{} try{DMARCtxt=await doh('_dmarc.'+domain,'TXT');}catch{}
+  const SPF=spfFrom(TXT), DMARC=dmarcFrom(DMARCtxt);
+  renderTable('#dns',['Type','Values'],[
+    ['A / AAAA',[...(A||[]),...(AAAA||[])].join('\n')],
+    ['MX',(MX||[]).join('\n')],
+    ['NS',(NS||[]).join('\n')],
+    ['TXT',(TXT||[]).join('\n')],
   ]);
-  renderTable('#mail', ['Control','Value'], [
+  renderTable('#mail',['Control','Value'],[
     ['SPF', SPF||'Missing'],
-    ['DMARC', DMARC? 'Present':'Missing'],
+    ['DMARC', DMARC?'Present':'Missing'],
     ['DMARC TXT', DMARC||'—'],
   ]);
-  const r = await rdap(domain); const ev=r.events||[];
-  let created = (ev.find(e=>e.eventAction==='registration')||{}).eventDate || '';
-  let changed = (ev.find(e=>e.eventAction==='last changed')||{}).eventDate || '';
-  const registrar = (r.registrar && (r.registrar.name || r.registrar.email)) || '';
-  const status = (r.status||[]).join(', ');
+  const r=await rdap(domain); const ev=r.events||[];
+  const created=(ev.find(e=>e.eventAction==='registration')||{}).eventDate||'';
+  const changed=(ev.find(e=>e.eventAction==='last changed')||{}).eventDate||'';
+  const registrar=(r.registrar && (r.registrar.name||r.registrar.email))||'';
+  const status=(r.status||[]).join(', ');
   let privacy=false;
-  for(const ent of (r.entities||[])){
-    const va = ent.vcardArray && ent.vcardArray[1] || [];
-    for(const it of va){ if(Array.isArray(it) && it[0]==='org'){ const org=(it[3]||'').toString().toLowerCase(); if(/privacy|proxy|guard/.test(org)) privacy=true; } }
+  for(const ent of (r.entities||[])){ const va=ent.vcardArray && ent.vcardArray[1] || [];
+    for(const it of va){ if(Array.isArray(it)&&it[0]==='org'){ const org=(it[3]||'').toString().toLowerCase(); if(/privacy|proxy|guard/.test(org)) privacy=true; } }
   }
   kv('#rdap', [['Registrar', registrar], ['Registered', created], ['Last changed', changed], ['Status', status], ['Privacy/Proxy', privacy?'Yes':'No']]);
-  // geo
-  const rows=[['IP','Country','ASN','ISP']];
+  // IP Intel
+  const rows=[['IP','Geo (ipwho.is)','ASN/Org (BGPView)','Shodan InternetDB']];
   for(const ip of (A||[]).slice(0,5)){
-    try{ const g=await geo(ip); rows.push([ip, g.country||'', g.connection?('AS'+g.connection.asn):(g.asn||''), g.connection?.isp||g.isp||'']); }
-    catch(e){ rows.push([ip,'','','']); }
+    let g={}, b={}, s={};
+    try{g=await geo(ip);}catch{} try{b=await bgpview(ip);}catch{} try{s=await shodanInternetDB(ip);}catch{}
+    const geoTxt = [g.country,g.city].filter(Boolean).join(', ');
+    const bgpTxt = (b.data && b.data.prefixes && b.data.prefixes[0]) ?
+      `${b.data.prefixes[0].asn?.asn || ''} ${b.data.prefixes[0].name || ''}` : '';
+    const shodanTxt = s.ports ? `ports: ${s.ports.slice(0,12).join(', ')}` : (s.tags? s.tags.join(', '):'');
+    rows.push([ip, geoTxt, bgpTxt, shodanTxt]);
   }
-  renderTable('#geo', rows.shift(), rows);
-  return {A,MX,created,DMARC,registrar,TXT,rdfull:r};
+  renderTable('#ipintel', rows.shift(), rows);
+  return {A,MX,created,DMARC,registrar,TXT,rdap:r};
 }
 
-// ========= CT lookalikes =========
+// ===== ViewDNS / DNSlytics helpers (HTML snapshots) =====
+async function viewdnsRecords(domain){
+  try{
+    const html=await getText('https://viewdns.info/dnsrecord/?domain='+encodeURIComponent(domain));
+    const rows=[...html.matchAll(/<tr>\s*<td>([A-Z]+)<\/td>\s*<td>(.*?)<\/td>/gi)].map(m=>[m[1], m[2].replace(/<[^>]+>/g,'')]);
+    renderTable('#dns_viewdns',['Type','Value'], rows);
+    return rows;
+  }catch(e){ renderTable('#dns_viewdns',['Type','Value'],[]); return []; }
+}
+async function dnslyticsMail(domain){
+  try{
+    const html=await getText('https://dnslytics.com/domain/'+encodeURIComponent(domain));
+    const mx=[...html.matchAll(/<td>MX<\/td>\s*<td>(.*?)<\/td>/gi)].map(m=>['MX', m[1].replace(/<[^>]+>/g,'')]);
+    const spf=[...html.matchAll(/<td>SPF<\/td>\s*<td>(.*?)<\/td>/gi)].map(m=>['SPF', m[1].replace(/<[^>]+>/g,'')]);
+    const dmarc=[...html.matchAll(/<td>DMARC<\/td>\s*<td>(.*?)<\/td>/gi)].map(m=>['DMARC', m[1].replace(/<[^>]+>/g,'')]);
+    const rows=[...mx,...spf,...dmarc];
+    renderTable('#mail_dnslytics',['Control','Value'], rows);
+    return rows;
+  }catch(e){ renderTable('#mail_dnslytics',['Control','Value'],[]); return []; }
+}
+
+// ===== Raw WHOIS, history, dossier =====
+async function whoisRaw(domain){
+  try{
+    const html=await getText('https://www.whois.com/whois/'+encodeURIComponent(domain));
+    const pre = (html.match(/<pre[^>]*id="registrarData"[^>]*>([\s\S]*?)<\/pre>/i) || html.match(/<pre[^>]*id="registryData"[^>]*>([\s\S]*?)<\/pre>/i) || [])[1] || '';
+    const text=pre.replace(/<br\s*\/?>/gi,'\n').replace(/<[^>]+>/g,'').trim();
+    const lines=text? text.split('\n').slice(0,40):[];
+    renderTable('#whois',['WHOIS (first 40 lines)'], lines.map(l=>[l]));
+    return text;
+  }catch(e){ renderTable('#whois',['WHOIS'],[]); return ''; }
+}
+async function whoisHistory(domain){
+  try{
+    const html=await getText('https://viewdns.info/whois-history/?domain='+encodeURIComponent(domain));
+    const cnt=(html.match(/Occurrences of WHOIS records/)? (html.match(/<tr>/g)||[]).length-1 : 0);
+    const last=(html.match(/<td>(\d{4}-\d{2}-\d{2})<\/td>/) || [,''])[1];
+    const note = `Records: ${cnt || 'n/a'}  Latest: ${last || 'n/a'}`;
+    const tbody=$('#whois').querySelector('tbody');
+    tbody.insertAdjacentHTML('afterbegin','<tr><td class="muted small">'+esc('WHOIS history (ViewDNS): '+note)+'</td></tr>');
+    return {cnt,last};
+  }catch(e){ return {}; }
+}
+async function domainDossier(domain){
+  try{
+    const html=await getText('https://centralops.net/co/DomainDossier.aspx?dom_whois=true&dom_dns=true&addr='+encodeURIComponent(domain));
+    const ns = [...html.matchAll(/Name Server:\s*<\/b>\s*([^<\s]+)/gi)].map(m=>m[1]).slice(0,5).join(', ');
+    const reg = (html.match(/Registrant:\s*<\/b>\s*([^<]+)/i)||[])[1]||'';
+    const tbody=$('#whois').querySelector('tbody');
+    tbody.insertAdjacentHTML('afterbegin','<tr><td class="muted small">'+esc('Domain Dossier — NS: '+ns+' | Registrant: '+reg)+'</td></tr>');
+    return {ns,reg};
+  }catch(e){ return {}; }
+}
+
+// ===== CT lookalikes & Censys certs (HTML parse) =====
 async function scanCT(needle, domain){
-  const names = await crt(needle);
-  const cleaned = (names||[]).filter(n => !domain || n!==domain);
-  const rows = cleaned.map(n=>[n, sim(n, needle).toFixed(3)]).sort((a,b)=> parseFloat(b[1])-parseFloat(a[1])).slice(0,200);
-  renderTable('#ct', ['Name','Similarity'], rows);
+  const names=await crt(needle);
+  const cleaned=(names||[]).filter(n=>!domain || n!==domain);
+  const rows=cleaned.map(n=>[n, sim(n,needle).toFixed(3)]).sort((a,b)=>parseFloat(b[1])-parseFloat(a[1])).slice(0,200);
+  renderTable('#ct',['Name','Similarity'],rows);
   return rows;
 }
+async function censysCerts(domain){
+  try{
+    const html=await getText('https://search.censys.io/certificates?q='+encodeURIComponent(domain));
+    const ids=[...html.matchAll(/href="\/certificate\/([a-f0-9]+)"/gi)].map(m=>m[1]);
+    const uniq=[...new Set(ids)].slice(0,10);
+    $('#censys_cert').innerHTML = uniq.length? ('Censys cert IDs: '+uniq.join(', ')) : '';
+    return uniq;
+  }catch(e){ $('#censys_cert').innerHTML=''; return []; }
+}
 
-// ========= Subdomains (multi-source) =========
-const escapeHost = (h)=>h.toLowerCase().replace(/\s+/g,'').replace(/^\*\.?/,'');
+// ===== Subdomain enumeration (multi-source) =====
+const subSources = {
+  omnisint: async d=>{ try{ const r=await fetch('https://sonar.omnisint.io/subdomains/'+encodeURIComponent(d)); if(r.ok) return r.json(); }catch{} try{ return await getJSON('https://sonar.omnisint.io/subdomains/'+encodeURIComponent(d)); }catch{} return []; },
+  anubis: async d=>{ try{ return await getJSON('https://jldc.me/anubis/subdomains/'+encodeURIComponent(d)); }catch(e){ return []; } },
+  rapiddns: async d=>{ try{ const html=await getText('https://rapiddns.io/subdomain/'+encodeURIComponent(d)+'?full=1'); return uniqHosts([html], d); }catch(e){ return []; } },
+  hackertarget: async d=>{ try{ const txt=await getText('https://api.hackertarget.com/hostsearch/?q='+encodeURIComponent(d)); return uniqHosts((txt||'').split('\n').map(l=>l.split(',')[0]), d); }catch(e){ return []; } },
+  bufferover: async d=>{ try{ const j=await getJSON('https://dns.bufferover.run/dns?q='+encodeURIComponent(d)); const a=[].concat(j.FDNS_A||[], j.RDNS||[], j.FDNS_CNAME||[]); const hosts=a.map(s=>(s.split(',')[1]||s)).filter(Boolean); return uniqHosts(hosts,d); }catch(e){ return []; } },
+  crtsh: async d=>{ try{ const n=await crt(d); return n.filter(x=>x.endsWith('.'+d)); }catch(e){ return []; } },
+  threatminer: async d=>{ try{ const j=await getJSON('https://api.threatminer.org/v2/domain.php?q='+encodeURIComponent(d)+'&rt=5'); return uniqHosts(j.results||[], d); }catch(e){ return []; } },
+  otx: async d=>{ try{ const j=await getJSON('https://otx.alienvault.com/api/v1/indicators/domain/'+encodeURIComponent(d)+'/passive_dns'); return uniqHosts((j.passive_dns||[]).map(x=>x.hostname), d); }catch(e){ return []; } },
+};
+const escapeHost = h=>h.toLowerCase().replace(/\s+/g,'').replace(/^\*\.?/,'');
 function uniqHosts(arr, domain){
-  const out=new Set();
-  const re = new RegExp(`([a-z0-9_-]+\\.)+${escapeRE(domain)}`,'gi');
-  for(const s of (arr||[])){
-    if(!s) continue;
-    const t = escapeHost(''+s);
+  const out=new Set(); const re=new RegExp(`([a-z0-9_-]+\\.)+${escapeRE(domain)}`,'gi');
+  for(const s of (arr||[])){ if(!s) continue; const t=escapeHost(''+s);
     if(t===domain || t.endsWith('.'+domain)) out.add(t);
-    else{
-      const m = t.match(re);
-      if(m) m.forEach(v=>out.add(escapeHost(v)));
-    }
+    else{ const m=t.match(re); if(m) m.forEach(v=>out.add(escapeHost(v))); }
   }
   return [...out];
 }
-async function subdomains_omnisint(domain){
-  try{ const r=await fetch('https://sonar.omnisint.io/subdomains/'+encodeURIComponent(domain)); if(r.ok) return r.json(); }catch(e){}
-  try{ return await getJSON('https://sonar.omnisint.io/subdomains/'+encodeURIComponent(domain)); }catch(e){ return []; }
-}
-async function subdomains_anubis(domain){
-  try{ return await getJSON('https://jldc.me/anubis/subdomains/'+encodeURIComponent(domain)); }catch(e){ return []; }
-}
-async function subdomains_rapiddns(domain){
-  try{ const html = await getText('https://rapiddns.io/subdomain/'+encodeURIComponent(domain)+'?full=1'); return uniqHosts([html], domain); }catch(e){ return []; }
-}
-async function subdomains_hackertarget(domain){
-  try{ const txt = await getText('https://api.hackertarget.com/hostsearch/?q='+encodeURIComponent(domain)); return uniqHosts((txt||'').split('\n').map(l=>l.split(',')[0]), domain); }catch(e){ return []; }
-}
-async function subdomains_bufferover(domain){
-  try{ const j = await getJSON('https://dns.bufferover.run/dns?q='+encodeURIComponent(domain)); const a = [].concat(j.FDNS_A||[], j.RDNS||[], j.FDNS_CNAME||[]); const hosts = a.map(s=> (s.split(',')[1]||s)).filter(Boolean); return uniqHosts(hosts, domain); }catch(e){ return []; }
-}
-async function subdomains_crt(domain){
-  try{ const names=await crt(domain); return names.filter(n=>n.endsWith('.'+domain)); }catch(e){ return []; }
-}
-async function subdomains_threatminer(domain){
-  try{ const j=await getJSON('https://api.threatminer.org/v2/domain.php?q='+encodeURIComponent(domain)+'&rt=5'); return uniqHosts(j.results||[], domain); }catch(e){ return []; }
-}
-async function subdomains_otx(domain){
-  try{ const j=await getJSON('https://otx.alienvault.com/api/v1/indicators/domain/'+encodeURIComponent(domain)+'/passive_dns'); return uniqHosts((j.passive_dns||[]).map(x=>x.hostname), domain); }catch(e){ return []; }
-}
-
 async function enumerateSubdomains(domain){
   setProgress('Enumerating subdomains (multi-source)…');
-  const sources = {
-    omnisint: subdomains_omnisint(domain),
-    anubis: subdomains_anubis(domain),
-    rapiddns: subdomains_rapiddns(domain),
-    hackertarget: subdomains_hackertarget(domain),
-    bufferover: subdomains_bufferover(domain),
-    crtsh: subdomains_crt(domain),
-    threatminer: subdomains_threatminer(domain),
-    otx: subdomains_otx(domain),
-  };
-  const results = await Promise.all(Object.entries(sources).map(async([k,p])=>[k, await p.catch(()=>[])]));
-  const map = new Map();
-  for(const [src, arr] of results){
-    for(const h of arr){
-      if(!map.has(h)) map.set(h,new Set());
-      map.get(h).add(src);
-    }
-  }
-  const list = [...map.entries()].map(([host,set])=>({host, sources:[...set].sort()})).sort((a,b)=>a.host.localeCompare(b.host));
-
-  // Resolve first A for up to 200 hosts to show signal
+  const entries=await Promise.all(Object.entries(subSources).map(async([k,fn])=>[k, await fn(domain)]));
+  const counts = entries.map(([k,a])=>`${k}: ${a.length}`).join(' • ');
+  $('#sub_counts').textContent = 'Source counts — '+counts;
+  const map=new Map();
+  for(const [src, arr] of entries){ for(const h of arr){ if(!map.has(h)) map.set(h,new Set()); map.get(h).add(src); } }
+  const list=[...map.entries()].map(([host,set])=>({host,sources:[...set].sort()})).sort((a,b)=>a.host.localeCompare(b.host));
+  // Resolve first A for up to N
   setProgress('Resolving A records for subdomains…');
-  const targets = list.slice(0,200);
-  let i=0; const out = Array(targets.length);
-  const workers = 8;
-  async function w(){
-    while(i<targets.length){
-      const idx=i++; const h=targets[idx].host;
-      let A=[]; try{ A=await doh(h,'A'); }catch(e){}
-      out[idx]=[h, (A||[])[0]||'', targets[idx].sources.join(', ')];
-      setProgress('Subdomain DNS '+(idx+1)+'/'+targets.length);
-    }
-  }
+  const targets=list.slice(0,300); let i=0; const out=Array(targets.length); const workers=8;
+  async function w(){ while(i<targets.length){ const idx=i++; const h=targets[idx].host; let A=[]; try{ A=await doh(h,'A'); }catch{} out[idx]=[h,(A||[])[0]||'',targets[idx].sources.join(', ')]; setProgress(`Subdomain DNS ${idx+1}/${targets.length}`); } }
   await Promise.all(Array.from({length:workers}, w));
   renderTable('#subs',['Subdomain','First A','Sources'], out);
   return out;
 }
 
-// ========= SSL Labs =========
+// ===== SSL Labs =====
 async function sslLabs(domain){
-  $('#sslStatus').innerHTML = 'Starting SSL Labs scan…';
-  renderTable('#sslTable',['IP','Grade','Status'],[]);
+  $('#sslStatus').innerHTML='Starting SSL Labs scan…'; renderTable('#sslTable',['IP','Grade','Status'],[]);
   let tries=0, started=false;
   while(tries<25){
     tries++;
     try{
-      const url = 'https://api.ssllabs.com/api/v3/analyze?host='
-        + encodeURIComponent(domain)
-        + '&all=done' + (started? '&startNew=off' : '&startNew=on');
-      const j = await getJSON(url);
-      const st = j.status || 'UNKNOWN';
-      $('#sslStatus').innerHTML = 'SSL Labs: '+esc(st)+' ('+tries+')';
-      if(st==='READY' && Array.isArray(j.endpoints)){
-        const rows = j.endpoints.map(ep=>[ep.ipAddress||'', ep.grade||'', ep.statusMessage||'']);
-        renderTable('#sslTable',['IP','Grade','Status'], rows);
-        $('#sslStatus').innerHTML = 'SSL Labs: READY';
-        return rows;
-      }
+      const url='https://api.ssllabs.com/api/v3/analyze?host='+encodeURIComponent(domain)+'&all=done'+(started?'&startNew=off':'&startNew=on');
+      const j=await getJSON(url);
+      const st=j.status||'UNKNOWN'; $('#sslStatus').innerHTML='SSL Labs: '+esc(st)+' ('+tries+')';
+      if(st==='READY' && Array.isArray(j.endpoints)){ const rows=j.endpoints.map(ep=>[ep.ipAddress||'', ep.grade||'', ep.statusMessage||'']); renderTable('#sslTable',['IP','Grade','Status'],rows); $('#sslStatus').innerHTML='SSL Labs: READY'; return rows; }
       if(st==='ERROR' || st==='DNS'){ $('#sslStatus').innerHTML='SSL Labs: '+esc(st); return []; }
-    }catch(e){ /* retry */ }
+    }catch(e){}
     started=true; await sleep(6000);
   }
-  $('#sslStatus').innerHTML = 'SSL Labs: Timed out / no result';
+  $('#sslStatus').innerHTML='SSL Labs: Timed out / no result';
   return [];
 }
 
-// ========= Public Emails =========
+// ===== Public Emails =====
 function extractEmails(text){ const re=/[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/gi; return [...new Set((text.match(re)||[]))]; }
-function rdapEmails(r){ const out=new Set(); try{ for(const ent of (r.entities||[])){ const va = ent.vcardArray && ent.vcardArray[1] || []; for(const it of va){ if(Array.isArray(it) && it[0]==='email'){ const v=(it[3]||'').toString(); if(v) out.add(v); } } } }catch(e){} return [...out]; }
+function rdapEmails(r){ const out=new Set(); try{ for(const ent of (r.entities||[])){ const va=ent.vcardArray && ent.vcardArray[1] || []; for(const it of va){ if(Array.isArray(it) && it[0]==='email'){ const v=(it[3]||'').toString(); if(v) out.add(v); } } } }catch(e){} return [...out]; }
 async function gatherPublicEmails(domain, txtRecords, rdapObj){
   setProgress('Gathering public emails…');
   const base='https://'+domain;
   const pages=['/','.well-known/security.txt','/security.txt','/contact','/contact-us','/contacts','/about','/team','/careers','/support','/help','/legal','/privacy','/terms','/impressum','/robots.txt','/sitemap.xml'];
   const found=new Set();
-
   // DMARC rua/ruf
-  for(const t of (txtRecords||[])){
-    const m = t.match(/ru[af]=mailto:([^,\s]+)/gi);
-    if(m){ m.forEach(s=>found.add(s.split(':').pop())); }
-  }
+  for(const t of (txtRecords||[])){ const m=t.match(/ru[af]=mailto:([^,\s]+)/gi); if(m){ m.forEach(s=>found.add(s.split(':').pop())); } }
   // SOA RNAME
-  try{
-    const soa = await doh(domain,'SOA');
-    if(soa && soa[0]){
-      const parts=soa[0].split(' ');
-      if(parts[1]){ const rname=parts[1].replace(/\.$/,'').replace(/\./g,'@'); if(/@/.test(rname)) found.add(rname); }
-    }
-  }catch(e){}
+  try{ const soa=await doh(domain,'SOA'); if(soa&&soa[0]){ const parts=soa[0].split(' '); if(parts[1]){ const rname=parts[1].replace(/\.$/,'').replace(/\./g,'@'); if(/@/.test(rname)) found.add(rname); } } }catch{}
   // RDAP entity emails
   rdapEmails(rdapObj||{}).forEach(e=>found.add(e));
-
   // Site pages
-  for(const p of pages){
-    const html = await getText(base.replace(/\/$/,'')+p);
-    if(!html) continue;
-    extractEmails(html).forEach(e=>found.add(e));
-    const mailtos = [...html.matchAll(/mailto:([^"'>\s]+)/gi)].map(m=>m[1].split('?')[0]);
-    mailtos.forEach(e=>found.add(e));
-  }
-  const list=[...found].sort();
-  renderTable('#emails',['Email'], list.map(e=>[e]));
-  return list;
+  for(const p of pages){ const html=await getText(base.replace(/\/$/,'')+p); if(!html) continue; extractEmails(html).forEach(e=>found.add(e)); const mailtos=[...html.matchAll(/mailto:([^"'>\s]+)/gi)].map(m=>m[1].split('?')[0]); mailtos.forEach(e=>found.add(e)); }
+  const list=[...found].sort(); renderTable('#emails',['Email'], list.map(e=>[e])); return list;
 }
 
-// ========= Branding =========
+// ===== Branding & Socials =====
 async function fetchBranding(domain){
   setProgress('Discovering branding…');
-  const base='https://'+domain; const html = await getText(base);
+  const base='https://'+domain; const html=await getText(base);
   const out=[]; const logos=$('#logos'); if(logos) logos.innerHTML='';
   if(html){
-    const iconTags = [...html.matchAll(/<link[^>]+rel=["'](?:icon|shortcut icon|apple-touch-icon)["'][^>]*>/gi)].map(m=>m[0]);
-    const iconHrefs = iconTags.map(tag=> (tag.match(/href=["']([^"']+)/i)||[])[1]).filter(Boolean)
-      .map(h=>{ try{ return new URL(h, base).href; }catch(e){ return h; } });
-    const og = (html.match(/property=["']og:image["'][^>]*content=["']([^"']+)/i)||[])[1];
-    if(og){ try{ iconHrefs.push(new URL(og, base).href); }catch(e){ iconHrefs.push(og); } }
+    const iconTags=[...html.matchAll(/<link[^>]+rel=["'](?:icon|shortcut icon|apple-touch-icon)["'][^>]*>/gi)].map(m=>m[0]);
+    const iconHrefs=iconTags.map(tag=> (tag.match(/href=["']([^"']+)/i)||[])[1]).filter(Boolean)
+      .map(h=>{ try{ return new URL(h,base).href; }catch(e){ return h; } });
+    const og=(html.match(/property=["']og:image["'][^>]*content=["']([^"']+)/i)||[])[1];
+    if(og){ try{ iconHrefs.push(new URL(og,base).href); }catch(e){ iconHrefs.push(og); } }
     const imgs=[...new Set(iconHrefs)];
     imgs.forEach(src=>{ const img=new Image(); img.src=src; img.alt='logo'; logos?.appendChild(img); out.push(['Icon',src]); });
   }
@@ -495,110 +482,338 @@ async function fetchBranding(domain){
   tb.querySelector('tbody').innerHTML= out.map(([k,u])=>'<tr><td>'+esc(k)+'</td><td><a target="_blank" rel="noreferrer" href="'+esc(u)+'">'+esc(u)+'</a></td></tr>').join('');
   return out;
 }
-
-// ========= Socials =========
 async function findSocials(domain){
   setProgress('Finding social profiles…');
-  const base='https://'+domain; const html = await getText(base);
-  const rows=[]; if(!html){ renderTable('#social',["Network","URL"],[]); return []; }
+  const base='https://'+domain; const html=await getText(base); const rows=[]; if(!html){ renderTable('#social',["Network","URL"],[]); return []; }
   function grab(re){ return [...new Set((html.match(re)||[]))]; }
-  const links = [
-    ...grab(/https?:\/\/([a-z]+\.)?linkedin\.com\/[A-Za-z0-9_\-\/]+/gi),
-    ...grab(/https?:\/\/twitter\.com\/[A-Za-z0-9_]+/gi),
-    ...grab(/https?:\/\/x\.com\/[A-Za-z0-9_]+/gi),
-    ...grab(/https?:\/\/facebook\.com\/[A-Za-z0-9_.\-\/]+/gi),
-    ...grab(/https?:\/\/www\.youtube\.com\/[A-Za-z0-9_.\-\/]+/gi),
-    ...grab(/https?:\/\/instagram\.com\/[A-Za-z0-9_.\-\/]+/gi),
-  ];
-  links.forEach(u=>{
-    let n='Other';
-    if(/linkedin/i.test(u)) n='LinkedIn';
-    else if(/twitter|x\.com/i.test(u)) n='Twitter/X';
-    else if(/facebook/i.test(u)) n='Facebook';
-    else if(/youtube/i.test(u)) n='YouTube';
-    else if(/instagram/i.test(u)) n='Instagram';
-    rows.push([n,u]);
-  });
-  $('#social').querySelector('thead').innerHTML='<tr><th>Network</th><th>URL</th></tr>';
-  $('#social').querySelector('tbody').innerHTML = rows.length? rows.map(r=>'<tr><td>'+esc(r[0])+'</td><td><a target="_blank" rel="noreferrer" href="'+esc(r[1])+'">'+esc(r[1])+'</a></td></tr>').join('') : '<tr><td colspan="2" class="muted">No social links found</td></tr>';
+  const links=[ ...grab(/https?:\/\/([a-z]+\.)?linkedin\.com\/[A-Za-z0-9_\-\/]+/gi),
+                ...grab(/https?:\/\/twitter\.com\/[A-Za-z0-9_]+/gi),
+                ...grab(/https?:\/\/x\.com\/[A-Za-z0-9_]+/gi),
+                ...grab(/https?:\/\/facebook\.com\/[A-Za-z0-9_.\-\/]+/gi),
+                ...grab(/https?:\/\/www\.youtube\.com\/[A-Za-z0-9_.\-\/]+/gi),
+                ...grab(/https?:\/\/instagram\.com\/[A-Za-z0-9_.\-\/]+/gi)];
+  links.forEach(u=>{ let n='Other'; if(/linkedin/i.test(u)) n='LinkedIn'; else if(/twitter|x\.com/i.test(u)) n='Twitter/X';
+    else if(/facebook/i.test(u)) n='Facebook'; else if(/youtube/i.test(u)) n='YouTube'; else if(/instagram/i.test(u)) n='Instagram'; rows.push([n,u]); });
+  renderTable('#social',['Network','URL'], rows);
   return rows;
 }
 
-// ========= Runner =========
-function normalizeInputs(){
-  const domainRaw = $('#domain').value.trim();
-  const brandRaw = $('#brand').value.trim();
-  return {
-    domain: domainRaw? domainRaw.replace(/^https?:\/\//,'').replace(/\/$/,'').toLowerCase() : '',
-    brand:  brandRaw?  brandRaw.replace(/[^a-z0-9-]/gi,'').toLowerCase() : ''
-  };
+// ===== Typosquats (light dnstwist) & takeover hints =====
+function dnstwistCandidates(domain){
+  const [label, ...rest]=domain.split('.'); const tld=rest.join('.');
+  const kbd={'a':'qwsz','b':'vghn','c':'xdfv','d':'ersfx','e':'wsdfr','f':'rtdgc','g':'ftyhb','h':'gyujn','i':'ujko','j':'huikm','k':'jiol,','l':'kop;','m':'njk','n':'bhjm','o':'iklp','p':'ol;','q':'wa','r':'edft','s':'awedx','t':'rfgy','u':'yhji','v':'cfgb','w':'qas','x':'zsdc','y':'tugh','z':'xsa'};
+  const out=new Set();
+  // omission
+  for(let i=0;i<label.length;i++) out.add(label.slice(0,i)+label.slice(i+1));
+  // transposition
+  for(let i=0;i<label.length-1;i++) out.add(label.slice(0,i)+label[i+1]+label[i]+label.slice(i+2));
+  // replacement (adjacent)
+  for(let i=0;i<label.length;i++){ const c=label[i].toLowerCase(); (kbd[c]||'').split('').forEach(r=> out.add(label.slice(0,i)+r+label.slice(i+1))); }
+  // duplication
+  for(let i=0;i<label.length;i++) out.add(label.slice(0,i)+label[i]+label[i]+label.slice(i+1));
+  // hyphenation
+  for(let i=1;i<label.length;i++) out.add(label.slice(0,i)+'-'+label.slice(i));
+  return [...out].filter(s=>s && s!==label).map(s=>s+'.'+tld);
+}
+const takeoverHints=[/\.github\.io$/i,/\.herokuapp\.com$/i,/\.azurewebsites\.net$/i,/\.cloudfront\.net$/i,/\.amazonaws\.com$/i,/\.netlify\.app$/i,/\.readthedocs\.io$/i,/\.fastly\.net$/i,/\.pages\.dev$/i];
+async function typosAndTakeover(domain){
+  setProgress('Generating typo domains…');
+  const candidates=dnstwistCandidates(domain).slice(0,200);
+  const rows=[]; let i=0; const workers=8;
+  async function w(){
+    while(i<candidates.length){
+      const idx=i++; const d=candidates[idx]; let A=[], C=[];
+      try{ A=await doh(d,'A'); }catch{} try{ C=await doh(d,'CNAME'); }catch{}
+      const cname=(C||[])[0]||''; const provider = takeoverHints.find(re=>re.test((cname||'').toLowerCase())) ? '3rd-party CNAME' : '';
+      if((A&&A.length) || cname){ rows.push([d,(A||[])[0]||'', cname, provider]); }
+      setProgress(`Typosquats checked ${idx+1}/${candidates.length}`);
+    }
+  }
+  await Promise.all(Array.from({length:workers}, w));
+  rows.sort((a,b)=>a[0].localeCompare(b[0]));
+  renderTable('#typos',['Domain','First A','CNAME','Hint'], rows);
+  return rows;
 }
 
-async function run(){
-  if(RUNNING) return;
-  const {domain, brand} = normalizeInputs();
-  if(!domain && !brand){ alert('Enter a Domain and/or Brand'); return; }
+// ===== Wayback & Favicon hash =====
+async function wayback(domain){
+  try{
+    // Use the CDX API to get first/last snapshots and counts
+    // 1) summary: get first and last timestamps
+    const index = await getJSON(`https://web.archive.org/cdx/search/cdx?url=${encodeURIComponent(domain)}/*&output=json&fl=timestamp,original&filter=statuscode:200&limit=2&from=1996&to=`);
+    const arr = Array.isArray(index) ? index.slice(1) : [];
+    // 2) count only
+    const cntTxt = await getText(`https://web.archive.org/cdx/search/cdx?url=${encodeURIComponent(domain)}/*&output=json&fl=timestamp&filter=statuscode:200&limit=5000`);
+    let total = 0, first='', last='';
+    if(cntTxt){
+      try{
+        const tmp = JSON.parse(cntTxt);
+        if(Array.isArray(tmp) && tmp.length>1){
+          total = tmp.length-1;
+          first = tmp[1]?.[0] || '';
+          last  = tmp[tmp.length-1]?.[0] || '';
+        }
+      }catch(e){}
+    }
+    // Human friendly
+    const fmt = (ts)=> ts && ts.length>=14 ? `${ts.slice(0,4)}-${ts.slice(4,6)}-${ts.slice(6,8)} ${ts.slice(8,10)}:${ts.slice(10,12)}:${ts.slice(12,14)} UTC` : (ts||'');
+    const rows = [
+      ['First seen', fmt(first)],
+      ['Last seen', fmt(last)],
+      ['Snapshots', total? String(total) : 'n/a'],
+      ['Calendar', `https://web.archive.org/web/*/${domain}`],
+    ];
+    renderTable('#wayback', ['Field','Value'], rows);
+    return {first,last,total};
+  }catch(e){
+    renderTable('#wayback',['Field','Value'],[]);
+    return {};
+  }
+}
 
-  // reset UI
-  $('#summary').innerHTML = '<span class="spinner"></span> Running lookups…';
-  ['#tld','#dns','#mail','#geo','#ct','#subs','#emails','#branding','#social','#sslTable'].forEach(sel=>{
-    const el=$(sel); if(!el) return; const h=el.querySelector('thead'); const b=el.querySelector('tbody'); if(h) h.innerHTML=''; if(b) b.innerHTML='';
-  });
-  $('#rdap').innerHTML=''; $('#logos').innerHTML=''; $('#sslStatus').innerHTML=''; setProgress(''); setBusy(true);
+// Minimal MurmurHash3 (x86, 32-bit) for favicon hashing (as commonly used by Shodan)
+function mmh3_32(key){
+  function mul32(a,b){ const ah=(a>>>16)&0xffff, al=a&0xffff, bh=(b>>>16)&0xffff, bl=b&0xffff; return ((al*bl)+(((ah*bl+al*bh)<<16)>>>0))>>>0; }
+  function rotl32(x,r){ return (x<<r)|(x>>> (32-r)); }
+  let data=[];
+  for(let i=0;i<key.length;i++) data.push(key.charCodeAt(i) & 0xff);
+  let h1=0;
+  const c1=0xcc9e2d51>>>0, c2=0x1b873593>>>0;
+  let i=0;
+  while(i+4<=data.length){
+    let k1 = data[i] | (data[i+1]<<8) | (data[i+2]<<16) | (data[i+3]<<24); i+=4;
+    k1 = mul32(k1, c1);
+    k1 = rotl32(k1, 15);
+    k1 = mul32(k1, c2);
+    h1 ^= k1;
+    h1 = rotl32(h1, 13);
+    h1 = (mul32(h1,5) + 0xe6546b64)>>>0;
+  }
+  let k1=0;
+  switch(data.length & 3){
+    case 3: k1 ^= data[i+2] << 16;
+    case 2: k1 ^= data[i+1] << 8;
+    case 1: k1 ^= data[i];
+            k1 = mul32(k1, c1);
+            k1 = rotl32(k1, 15);
+            k1 = mul32(k1, c2);
+            h1 ^= k1;
+  }
+  h1 ^= data.length;
+  // fmix
+  h1 ^= h1>>>16; h1 = mul32(h1, 0x85ebca6b>>>0);
+  h1 ^= h1>>>13; h1 = mul32(h1, 0xc2b2ae35>>>0);
+  h1 ^= h1>>>16;
+  // convert to signed 32-bit int (Shodan uses signed)
+  if(h1 & 0x80000000){ return -(((~h1)>>>0) + 1); }
+  return h1|0;
+}
 
-  const results = {input:{domain,brand}, startedAt:new Date().toISOString()};
+async function faviconHash(domain){
+  try{
+    const base = 'https://'+domain.replace(/\/+$/,'');
+    // Try common favicon locations and fallbacks
+    const candidates = [
+      base + '/favicon.ico',
+      base + '/favicon.png',
+      'https://icons.duckduckgo.com/ip3/'+domain+'.ico'
+    ];
+    let used='', content='';
+    for(const url of candidates){
+      try{
+        // Use CORS-friendly mirror to retrieve bytes as text; then base64 it.
+        const prox = 'https://r.jina.ai/http/' + url.replace(/^https?:\/\//,'');
+        const r = await fetch(prox);
+        if(!r.ok) continue;
+        const t = await r.text();
+        if(t && t.length>32){ used=url; content=t; break; }
+      }catch(e){}
+    }
+    if(!content){
+      renderTable('#favhash',['Item','Value'], [['Status','No favicon found']]);
+      return {};
+    }
+    // Convert to base64 safely
+    // Note: The mirror gives us a text; base64 of that text approximates the Shodan method well enough client-side.
+    const b64 = btoa(unescape(encodeURIComponent(content)));
+    const toHash = `data:;base64,${b64}`;
+    const hash = mmh3_32(toHash);
+    renderTable('#favhash',['Item','Value'], [
+      ['Favicon URL', used],
+      ['mmh3 (Shodan style)', String(hash)],
+      ['Data URI (prefix only)', toHash.slice(0,64)+'…']
+    ]);
+    return {url:used, hash, dataURI: toHash};
+  }catch(e){
+    renderTable('#favhash',['Item','Value'], [['Error','Could not compute favicon hash']]);
+    return {};
+  }
+}
+
+// ===== Summary builder =====
+function addSummary(items){
+  const el = $('#summary');
+  el.innerHTML = items.map(x=>badge(x.type, x.text)).join(' ');
+}
+
+// ===== Orchestrator =====
+async function runScan({domain, brand}){
+  LAST = { started: new Date().toISOString(), domain, brand };
+  setBusy(true);
+  setProgress('Starting…');
+  const summaryItems = [];
+
+  let tldRows=[], domInfo={}, subs=[], sslRows=[], emails=[], branding=[], socials=[], typos=[], way={}, fav={};
 
   try{
-    if(brand){ const rows = await sweepBrand(brand); results.tldSweep = rows; }
-
-    let dres = {};
+    if(brand){
+      tldRows = await sweepBrand(brand);
+      LAST.tldSweep = tldRows;
+      summaryItems.push({type: tldRows.some(r=>r[4]==='Yes')?'good':'warn', text: `TLDs MX ${tldRows.filter(r=>r[4]==='Yes').length}`});
+    }
     if(domain){
-      setProgress('Domain lookups for '+domain+'…');
-      dres = await scanDomain(domain); results.domain = dres;
+      setProgress('Scanning domain DNS/RDAP…');
+      domInfo = await scanDomain(domain);
+      LAST.domain = domInfo;
+
+      // Enrich with external HTML snapshots
+      await Promise.all([
+        viewdnsRecords(domain),
+        dnslyticsMail(domain),
+        whoisRaw(domain).then(()=>whoisHistory(domain)),
+        domainDossier(domain)
+      ]);
+
+      summaryItems.push({type: domInfo.DMARC ? 'good':'bad', text: domInfo.DMARC ? 'DMARC present' : 'DMARC missing'});
+      summaryItems.push({type: (domInfo.TXT||[]).some(t=>/v=spf1/.test(t)) ? 'good':'warn', text: (domInfo.TXT||[]).some(t=>/v=spf1/.test(t)) ? 'SPF present' : 'SPF missing'});
+
+      // IP intel already rendered inside scanDomain()
+
+      // CT lookalikes and Censys
+      setProgress('Querying Certificate Transparency…');
+      const ctRows = await scanCT(brand || domain.split('.')[0], domain);
+      LAST.ct = ctRows;
+      await censysCerts(domain);
+
+      // Subdomains
+      subs = await enumerateSubdomains(domain);
+      LAST.subdomains = subs;
+      summaryItems.push({type: subs.length>0 ? 'warn':'good', text: `Subdomains ${subs.length}`});
+
+      // SSL Labs (async polling)
+      sslRows = await sslLabs(domain);
+      LAST.ssl = sslRows;
+      if(sslRows && sslRows.length){
+        const worst = sslRows.map(r=>r[1]||'').sort()[0] || '';
+        if(worst >= 'A') summaryItems.push({type: 'good', text: `SSL ${worst}`});
+        else if(worst) summaryItems.push({type:'warn', text:`SSL ${worst}`});
+      }
+
+      // Emails
+      emails = await gatherPublicEmails(domain, domInfo.TXT||[], domInfo.rdap||{});
+      LAST.emails = emails;
+      summaryItems.push({type: emails.length? 'warn':'good', text:`Public emails ${emails.length}`});
+
+      // Branding & Socials
+      branding = await fetchBranding(domain);
+      socials = await findSocials(domain);
+      LAST.branding = branding; LAST.socials = socials;
+
+      // Typosquats & Takeover
+      typos = await typosAndTakeover(domain);
+      LAST.typos = typos;
+      if(typos.some(r=>/3rd-party CNAME/i.test(r[3]||''))){
+        summaryItems.push({type:'warn', text:'Takeover hints detected'});
+      }
+
+      // Wayback & Favhash
+      way = await wayback(domain);
+      fav = await faviconHash(domain);
+      LAST.wayback = way; LAST.favicon = fav;
+
+    } else {
+      // brand-only path still shows empty placeholders
+      renderTable('#dns',['Type','Values'],[]);
+      renderTable('#mail',['Control','Value'],[]);
+      renderTable('#ipintel',['IP','Geo','ASN/Org','Shodan InternetDB'],[]);
+      renderTable('#ct',['Name','Similarity'],[]);
+      renderTable('#subs',['Subdomain','First A','Sources'],[]);
+      renderTable('#sslTable',['IP','Grade','Status'],[]);
+      renderTable('#emails',['Email'],[]);
+      renderTable('#branding',['Source','URL'],[]);
+      renderTable('#social',['Network','URL'],[]);
+      renderTable('#typos',['Domain','First A','CNAME','Hint'],[]);
+      renderTable('#wayback',['Field','Value'],[]);
+      renderTable('#favhash',['Item','Value'],[]);
     }
 
-    const needle = brand || (domain? domain.split('.')[0] : '');
-    if(needle){
-      setProgress('CT log search for "'+needle+'”…');
-      const ctrows = await scanCT(needle, domain); results.ct = ctrows;
-    }
+    // Final risk roll-up (simple heuristic)
+    let score = 0;
+    if(!domInfo.DMARC) score += 0.35;
+    if(!(domInfo.TXT||[]).some(t=>/v=spf1/.test(t))) score += 0.2;
+    if(subs.length>50) score += 0.15; else if(subs.length>10) score += 0.07;
+    if(typos.length>15) score += 0.1;
+    if(emails.length>5) score += 0.1;
+    addSummary([
+      ...summaryItems,
+      {type: score>=0.75?'bad':score>=0.45?'warn':'good', text: `Overall ${score>=0.75?'HIGH':score>=0.45?'MEDIUM':'LOW'} ${score.toFixed(2)}`}
+    ]);
 
-    if(domain){
-      await enumerateSubdomains(domain);
-      await sslLabs(domain);
-      try{ await fetchBranding(domain); }catch(e){}
-      try{ await gatherPublicEmails(domain, (results.domain&&results.domain.TXT)||[], (results.domain&&results.domain.rdfull)||{}); }catch(e){}
-      try{ await findSocials(domain); }catch(e){}
-    }
-
-    const hasMX = results.domain && results.domain.MX && results.domain.MX.length>0;
-    const dmarcMissing = results.domain ? !(results.domain.DMARC) : false;
-    const recent = results.domain && results.domain.created ? (new Date(results.domain.created) > new Date(Date.now()-1000*60*60*24*30)) : false;
-    let score = 0; if(hasMX) score += .25; if(dmarcMissing) score += .25; if(recent) score += .15;
-    const ctHigh = (results.ct||[]).some(r=> parseFloat(r[1])>0.7); if(ctHigh) score += .2;
-
-    $('#summary').innerHTML = risk(score) +
-      (domain? ' '+ (hasMX? '<span class="badge warn">MX present</span>' : '<span class="badge good">No MX</span>') : '') +
-      (domain? ' '+ (dmarcMissing? '<span class="badge bad">DMARC missing</span>' : '<span class="badge good">DMARC present</span>') : '');
-
-    setProgress(''); results.finishedAt = new Date().toISOString(); LAST = results;
-  }catch(err){
-    console.error(err); setProgress('');
-    $('#summary').innerHTML = '<span class="badge bad">Error</span> '+esc(err.message||'Run failed');
+    setProgress('');
+    LAST.completed = new Date().toISOString();
+  }catch(e){
+    console.error(e);
+    setProgress('Scan error encountered.');
   }finally{
     setBusy(false);
   }
 }
 
-// Wire up
-$('#f').addEventListener('submit', (e)=>{ e.preventDefault(); run(); });
-$('#demo').addEventListener('click', ()=>{ $('#domain').value='congruex.com'; $('#brand').value='congruex'; run(); });
-$('#dljson').addEventListener('click', ()=> downloadJSON(LAST));
-$('#dlcsv').addEventListener('click', ()=> {
-  const rows = (LAST.tldSweep||[]);
-  if(!rows.length){ alert('No brand sweep data yet. Enter a brand and run a scan.'); return; }
-  downloadCSV(rows, ["Domain","Created","Registrar","A?","MX?","First A","Country","ASN","ISP"]);
+// ===== UI wiring =====
+$('#f').addEventListener('submit', async (e)=>{
+  e.preventDefault();
+  if(RUNNING) return;
+  const domain = ($('#domain').value||'').trim().toLowerCase();
+  const brand = ($('#brand').value||'').trim().toLowerCase();
+  if(!domain && !brand){ alert('Enter a Domain and/or a Brand'); return; }
+  await runScan({domain, brand});
 });
+
+$('#demo').addEventListener('click', async ()=>{
+  if(RUNNING) return;
+  $('#domain').value = 'example.com';
+  $('#brand').value = 'example';
+  await runScan({domain:'example.com', brand:'example'});
+});
+
+$('#dljson').addEventListener('click', ()=>{
+  if(!Object.keys(LAST||{}).length){ alert('Run a scan first'); return; }
+  downloadJSON(LAST, 'osint_monitor_results.json');
+});
+
+$('#dlcsv').addEventListener('click', ()=>{
+  // Export Brand TLD sweep if available, else Subdomains
+  if(LAST.tldSweep && LAST.tldSweep.length){
+    downloadCSV(LAST.tldSweep, ["Domain","Created","Registrar","A?","MX?","First A","Country","ASN","ISP"], 'brand_tld_sweep.csv');
+  }else if(LAST.subdomains && LAST.subdomains.length){
+    downloadCSV(LAST.subdomains, ["Subdomain","First A","Sources"], 'subdomains.csv');
+  }else{
+    alert('Nothing to export yet — run a scan with Brand or Domain.');
+  }
+});
+
+// Try to prefill brand/domain from URL params
+(function initFromQuery(){
+  const u = new URL(location.href);
+  const d = (u.searchParams.get('domain')||'').trim();
+  const b = (u.searchParams.get('brand')||'').trim();
+  if(d) $('#domain').value = d;
+  if(b) $('#brand').value = b;
+  if(d || b){
+    runScan({domain:d.toLowerCase(), brand:b.toLowerCase()});
+  }
+})();
+
 </script>
 </body>
 </html>
