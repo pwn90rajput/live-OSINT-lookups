@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8"/>
   <meta name="viewport" content="width=device-width, initial-scale=1"/>
-  <title>OSINT Monitor — Free, No Keys</title>
+  <title>OSINT Monitor — Created with love & Use with Care ( follow me on at Insta @rajputpawanthakur )</title>
   <style>
     :root { --bg:#0b1020; --card:#0f1a34; --txt:#e7ecff; --muted:#a9b4d6; --accent:#7aa2ff; --good:#1bd760; --warn:#ffbd2e; --bad:#ff5c77; }
     *{box-sizing:border-box}
@@ -11,7 +11,6 @@
     .wrap{max-width:1200px;margin:24px auto;padding:0 16px}
     h1{margin:0 0 6px;font-size:28px}
     h2{margin:12px 0 10px}
-    h3{margin:6px 0}
     .sub{color:var(--muted)}
     .card{background:var(--card);border-radius:14px;padding:14px;margin:12px 0}
     .grid{display:grid;grid-template-columns:1fr 1fr auto auto auto;gap:10px;align-items:end}
@@ -38,18 +37,13 @@
     .pill{border:1px solid #23325a;border-radius:10px;padding:4px 8px}
     a{color:#9ec0ff}
     #logos img{max-height:64px;border-radius:10px;background:#0b1430;padding:6px}
-    .toolbox{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:12px}
-    .toolcard{border:1px solid #23325a;border-radius:12px;padding:10px}
-    .toolcard h3{margin:0 0 8px}
-    .toolcard ul{margin:0;padding-left:18px}
-    .toolcard li{margin:4px 0}
   </style>
 </head>
 <body>
   <div class="wrap">
     <header>
-      <h1>OSINT Monitor — Free, No Keys</h1>
-      <p class="sub">Live client-side lookups for any <b>Domain</b> or <b>Brand</b>. Uses DNS-over-HTTPS, RDAP, CT logs, GeoIP and community subdomain data. Works on GitHub Pages.</p>
+      <h1>OSINT Monitor — Created with love & Use with Care ( follow me on at Insta @rajputpawanthakur )</h1>
+      <p class="sub">Live client-side lookups for any <b>Domain</b> or <b>Brand</b>. Uses DoH, RDAP, CT logs, GeoIP, multi-source subdomains, SSL Labs, public email scraping (security.txt/DMARC/site pages), logos & social discovery. Works on GitHub Pages.</p>
     </header>
 
     <section class="card">
@@ -63,13 +57,13 @@
           <input id="brand" type="text" placeholder="dell" inputmode="text" spellcheck="false" />
         </div>
         <button type="submit" id="scanBtn">Scan</button>
-        <button type="button" id="demo" class="ghost" title="Run a demo scan">Demo</button>
+        <button type="button" id="demo" class="ghost">Demo</button>
         <div class="row">
-          <button type="button" id="dljson" class="ghost" title="Download last results as JSON">Download JSON</button>
-          <button type="button" id="dlcsv" class="ghost" title="Download brand sweep as CSV">Download CSV</button>
+          <button type="button" id="dljson" class="ghost">Download JSON</button>
+          <button type="button" id="dlcsv" class="ghost">Download CSV</button>
         </div>
       </form>
-      <p class="muted small">Tip: <b>Brand-only</b> mode sweeps many TLDs (e.g., dell.in, dell.ru, dell.xyz) and harvests CT lookalikes. All sources are free; some rate-limits apply.</p>
+      <p class="muted small">Tip: <b>Brand-only</b> mode sweeps many TLDs and harvests CT lookalikes. Free sources; rate-limits may apply.</p>
     </section>
 
     <section class="card">
@@ -113,53 +107,46 @@
       <table id="subs" class="tbl"><thead></thead><tbody></tbody></table>
     </section>
 
-    <!-- New: SSL Labs -->
     <section class="card">
       <h2>SSL Labs (Grade)</h2>
       <div id="sslStatus" class="muted small"></div>
       <table id="sslTable" class="tbl"><thead></thead><tbody></tbody></table>
     </section>
 
-    <!-- New: Public Emails -->
     <section class="card">
       <h2>Public Emails (discovered)</h2>
       <table id="emails" class="tbl"><thead></thead><tbody></tbody></table>
     </section>
 
-    <!-- New: Logos & Branding -->
     <section class="card">
       <h2>Logos & Branding</h2>
       <div id="logos" class="row" style="flex-wrap:wrap;gap:12px"></div>
       <table id="branding" class="tbl"><thead></thead><tbody></tbody></table>
     </section>
 
-    <!-- New: Social Profiles -->
     <section class="card">
       <h2>Social Profiles</h2>
       <table id="social" class="tbl"><thead></thead><tbody></tbody></table>
     </section>
 
-    <!-- OSINT Toolbox stays (links only for tools that need accounts) -->
-    <section class="card">
-      <h2>OSINT Toolbox (Quick Links)</h2>
-      <div id="toolbox" class="toolbox"></div>
-      <p class="muted small">Some tools require a free login; everything else is fetched above with no keys.</p>
-    </section>
-
     <footer class="card">
       <div class="row">
-        <span class="pill">Sources: Cloudflare & Google DoH, rdap.org, ipwho.is, crt.sh (via read-only mirror), sonar.omnisint.io, jldc.me (Anubis), RapidDNS, HackerTarget, BufferOver.run, ThreatMiner, AlienVault OTX, SSL Labs API</span>
+        <span class="pill">Sources: Cloudflare/Google DoH, rdap.org, ipwho.is, crt.sh (via mirror), Sonar Omnisint, Anubis (jldc.me), RapidDNS, HackerTarget, BufferOver.run, ThreatMiner, AlienVault OTX, SSL Labs</span>
         <span class="pill">No API keys • No login • Static hosting</span>
       </div>
     </footer>
   </div>
 
 <script>
-// ===== Utilities =====
+// ========= Utilities =========
 const $ = (s)=>document.querySelector(s);
 const esc = (s)=> (s??'').toString().replace(/[&<>"']/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m]));
 const sleep = (ms)=>new Promise(r=>setTimeout(r,ms));
 let LAST = {};
+let RUNNING = false;
+
+function setProgress(txt){ $('#progress').innerHTML = txt? '<span class="spinner"></span> '+esc(txt) : ''; }
+function setBusy(b){ RUNNING=b; $('#scanBtn').disabled=b; $('#demo').disabled=b; }
 
 function downloadJSON(obj, name='osint_results.json'){
   try{
@@ -182,7 +169,7 @@ function downloadCSV(rows, headers, name='tld_sweep.csv'){
   }catch(e){ alert('Could not download CSV'); }
 }
 
-// Fetch JSON with best-effort CORS fallback
+// Robust JSON fetch with CORS mirror fallback
 async function getJSON(url){
   try{
     const r = await fetch(url, {headers:{'accept':'application/json'}});
@@ -192,15 +179,20 @@ async function getJSON(url){
       return JSON.parse(await r.text());
     }
   }catch(e){}
+  // read-only mirror fallback (works for GETs)
   try{
     const proxy = 'https://r.jina.ai/http://' + url.replace(/^https?:\/\//,'');
-    const r2 = await fetch(proxy); if(!r2.ok) throw 0;
+    const r2 = await fetch(proxy);
+    if(!r2.ok) throw 0;
     const txt2 = await r2.text();
+    // Handle NDJSON-like streams (e.g., crt.sh)
     const safe = txt2.trim().split(/\n(?=\{)/).length>1 ? '['+txt2.trim().split(/\n(?=\{)/).join(',')+']' : txt2;
     return JSON.parse(safe);
-  }catch(e){ throw new Error('Fetch failed: '+url); }
+  }catch(e){
+    throw new Error('Fetch failed: '+url);
+  }
 }
-// Fetch TEXT (HTML) via read-only mirror (handles CORS)
+// TEXT (HTML) via mirror to avoid CORS
 async function getText(url){
   try{
     const proxy = 'https://r.jina.ai/http://' + url.replace(/^https?:\/\//,'');
@@ -208,31 +200,39 @@ async function getText(url){
   }catch(e){ return ''; }
 }
 
-// DoH DNS
+// ========= Lookups =========
+// DNS over HTTPS
 async function doh(name, type='A'){
   const cf = 'https://cloudflare-dns.com/dns-query?name='+encodeURIComponent(name)+'&type='+encodeURIComponent(type);
   try{
     const r=await fetch(cf,{headers:{'accept':'application/dns-json'}});
-    if(!r.ok) throw 0; const j=await r.json(); return (j.Answer||[]).map(a=>a.data);
+    if(!r.ok) throw 0;
+    const j=await r.json();
+    return (j.Answer||[]).map(a=>a.data);
   }catch(_){
     try{
       const gg='https://dns.google/resolve?name='+encodeURIComponent(name)+'&type='+encodeURIComponent(type);
       const r2=await fetch(gg,{headers:{'accept':'application/dns-json'}});
-      if(!r2.ok) return []; const j2=await r2.json(); return (j2.Answer||[]).map(a=>a.data);
+      if(!r2.ok) return [];
+      const j2=await r2.json();
+      return (j2.Answer||[]).map(a=>a.data);
     }catch(e){ return []; }
   }
 }
 const dmarcFrom=(arr)=> (arr||[]).find(t=>t.includes('v=DMARC1'))||null;
 const spfFrom=(arr)=> (arr||[]).find(t=>t.includes('v=spf1'))||null;
 
-// RDAP / Geo / CT
+// RDAP / Geo
 async function rdap(domain){ try{ return await getJSON('https://rdap.org/domain/'+encodeURIComponent(domain)); }catch(e){ return {}; }}
 async function geo(ip){ try{ const r=await fetch('https://ipwho.is/'+encodeURIComponent(ip)); if(!r.ok) return {}; return r.json(); }catch(e){ return {}; } }
+
+// Certificate Transparency (crt.sh)
 async function crt(needle){
   const url='https://crt.sh/?q=%25'+encodeURIComponent(needle)+'%25&output=json';
   try{
     const data = await getJSON(url);
-    const set=new Set(), out=[]; const arr = Array.isArray(data)? data : (data? [data] : []);
+    const set=new Set(), out=[];
+    const arr = Array.isArray(data)? data : (data? [data] : []);
     for(const rec of arr){
       const names=(rec.name_value||'').split('\n').map(s=>s.replace(/^\*\.?/,'').trim().toLowerCase()).filter(Boolean);
       for(const n of names){ if(!set.has(n)){ set.add(n); out.push(n);} }
@@ -241,7 +241,7 @@ async function crt(needle){
   }catch(e){ return []; }
 }
 
-// ===== Render helpers =====
+// ========= Render helpers =========
 function renderTable(sel, headers, rows){
   const table=$(sel); const thead=table.querySelector('thead'); const tbody=table.querySelector('tbody');
   if(thead) thead.innerHTML = '<tr>'+headers.map(h=>'<th>'+esc(h)+'</th>').join('')+'</tr>';
@@ -254,11 +254,7 @@ function risk(score){ if(score>=0.75) return badge('bad','HIGH '+score.toFixed(2
 const TLDS = ["com","net","org","io","co","ai","app","dev","site","online","info","biz","xyz","cloud","shop","in","ru","de","fr","it","es","nl","pl","se","no","fi","dk","eu","uk","co.uk","com.au","ca","jp","kr","vn","sg","hk","tw","br","mx","ar","za","tr","ua","cz","sk","ro","hu","pt","ie","ch","at","be","gr","lt","lv","ee","il","sa","ae","qa","kw","nz"];
 const escapeRE = (s)=>s.replace(/[.*+?^${}()|[\]\\]/g,'\\$&');
 
-// ===== Scan logic =====
-let RUNNING = false;
-function setProgress(txt){ $('#progress').innerHTML = txt? '<span class="spinner"></span> '+esc(txt) : ''; }
-function setBusy(b){ RUNNING=b; $('#scanBtn').disabled=b; $('#demo').disabled=b; }
-
+// ========= Brand sweep =========
 async function sweepBrand(brand){
   const targets = TLDS.map(tld=> brand+'.'+tld);
   const rows=[]; let done=0; const batch=6;
@@ -281,6 +277,7 @@ async function sweepBrand(brand){
   return rows;
 }
 
+// ========= Domain scan =========
 async function scanDomain(domain){
   let A=[],AAAA=[],MX=[],NS=[],TXT=[],DMARCtxt=[];
   try{ A = await doh(domain,'A'); }catch(e){}
@@ -319,20 +316,30 @@ async function scanDomain(domain){
     catch(e){ rows.push([ip,'','','']); }
   }
   renderTable('#geo', rows.shift(), rows);
-  return {A,MX,created,DMARC,registrar,TXT};
+  return {A,MX,created,DMARC,registrar,TXT,rdfull:r};
 }
 
-// ---- Multi-source Subdomain Enumeration ----
+// ========= CT lookalikes =========
+async function scanCT(needle, domain){
+  const names = await crt(needle);
+  const cleaned = (names||[]).filter(n => !domain || n!==domain);
+  const rows = cleaned.map(n=>[n, sim(n, needle).toFixed(3)]).sort((a,b)=> parseFloat(b[1])-parseFloat(a[1])).slice(0,200);
+  renderTable('#ct', ['Name','Similarity'], rows);
+  return rows;
+}
+
+// ========= Subdomains (multi-source) =========
+const escapeHost = (h)=>h.toLowerCase().replace(/\s+/g,'').replace(/^\*\.?/,'');
 function uniqHosts(arr, domain){
   const out=new Set();
   const re = new RegExp(`([a-z0-9_-]+\\.)+${escapeRE(domain)}`,'gi');
   for(const s of (arr||[])){
     if(!s) continue;
-    const t = (''+s).toLowerCase();
+    const t = escapeHost(''+s);
     if(t===domain || t.endsWith('.'+domain)) out.add(t);
     else{
       const m = t.match(re);
-      if(m) m.forEach(v=>out.add(v.toLowerCase()));
+      if(m) m.forEach(v=>out.add(escapeHost(v)));
     }
   }
   return [...out];
@@ -345,24 +352,13 @@ async function subdomains_anubis(domain){
   try{ return await getJSON('https://jldc.me/anubis/subdomains/'+encodeURIComponent(domain)); }catch(e){ return []; }
 }
 async function subdomains_rapiddns(domain){
-  try{
-    const html = await getText('https://rapiddns.io/subdomain/'+encodeURIComponent(domain)+'?full=1');
-    return uniqHosts([html], domain);
-  }catch(e){ return []; }
+  try{ const html = await getText('https://rapiddns.io/subdomain/'+encodeURIComponent(domain)+'?full=1'); return uniqHosts([html], domain); }catch(e){ return []; }
 }
 async function subdomains_hackertarget(domain){
-  try{
-    const txt = await getText('https://api.hackertarget.com/hostsearch/?q='+encodeURIComponent(domain));
-    return uniqHosts(txt.split('\n').map(l=>l.split(',')[0]), domain);
-  }catch(e){ return []; }
+  try{ const txt = await getText('https://api.hackertarget.com/hostsearch/?q='+encodeURIComponent(domain)); return uniqHosts((txt||'').split('\n').map(l=>l.split(',')[0]), domain); }catch(e){ return []; }
 }
 async function subdomains_bufferover(domain){
-  try{
-    const j = await getJSON('https://dns.bufferover.run/dns?q='+encodeURIComponent(domain));
-    const a = [].concat(j.FDNS_A||[], j.RDNS||[], j.FDNS_CNAME||[]);
-    const hosts = a.map(s=> (s.split(',')[1]||s)).filter(Boolean);
-    return uniqHosts(hosts, domain);
-  }catch(e){ return []; }
+  try{ const j = await getJSON('https://dns.bufferover.run/dns?q='+encodeURIComponent(domain)); const a = [].concat(j.FDNS_A||[], j.RDNS||[], j.FDNS_CNAME||[]); const hosts = a.map(s=> (s.split(',')[1]||s)).filter(Boolean); return uniqHosts(hosts, domain); }catch(e){ return []; }
 }
 async function subdomains_crt(domain){
   try{ const names=await crt(domain); return names.filter(n=>n.endsWith('.'+domain)); }catch(e){ return []; }
@@ -387,7 +383,6 @@ async function enumerateSubdomains(domain){
     otx: subdomains_otx(domain),
   };
   const results = await Promise.all(Object.entries(sources).map(async([k,p])=>[k, await p.catch(()=>[])]));
-  // Merge -> host -> sources
   const map = new Map();
   for(const [src, arr] of results){
     for(const h of arr){
@@ -396,17 +391,18 @@ async function enumerateSubdomains(domain){
     }
   }
   const list = [...map.entries()].map(([host,set])=>({host, sources:[...set].sort()})).sort((a,b)=>a.host.localeCompare(b.host));
-  // Resolve first A for up to 200 hosts
+
+  // Resolve first A for up to 200 hosts to show signal
   setProgress('Resolving A records for subdomains…');
-  const resolveTargets = list.slice(0,200);
-  let i=0; const out = Array(resolveTargets.length);
+  const targets = list.slice(0,200);
+  let i=0; const out = Array(targets.length);
   const workers = 8;
   async function w(){
-    while(i<resolveTargets.length){
-      const idx=i++; const h=resolveTargets[idx].host;
+    while(i<targets.length){
+      const idx=i++; const h=targets[idx].host;
       let A=[]; try{ A=await doh(h,'A'); }catch(e){}
-      out[idx]=[h, (A||[])[0]||'', resolveTargets[idx].sources.join(', ')];
-      setProgress('Subdomain DNS '+(idx+1)+'/'+resolveTargets.length);
+      out[idx]=[h, (A||[])[0]||'', targets[idx].sources.join(', ')];
+      setProgress('Subdomain DNS '+(idx+1)+'/'+targets.length);
     }
   }
   await Promise.all(Array.from({length:workers}, w));
@@ -414,7 +410,7 @@ async function enumerateSubdomains(domain){
   return out;
 }
 
-// ---- SSL Labs (free API) ----
+// ========= SSL Labs =========
 async function sslLabs(domain){
   $('#sslStatus').innerHTML = 'Starting SSL Labs scan…';
   renderTable('#sslTable',['IP','Grade','Status'],[]);
@@ -435,40 +431,59 @@ async function sslLabs(domain){
         return rows;
       }
       if(st==='ERROR' || st==='DNS'){ $('#sslStatus').innerHTML='SSL Labs: '+esc(st); return []; }
-    }catch(e){ /* ignore and retry */ }
+    }catch(e){ /* retry */ }
     started=true; await sleep(6000);
   }
   $('#sslStatus').innerHTML = 'SSL Labs: Timed out / no result';
   return [];
 }
 
-// ===== Add-ons: Emails / Branding / Social =====
+// ========= Public Emails =========
 function extractEmails(text){ const re=/[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/gi; return [...new Set((text.match(re)||[]))]; }
-async function gatherPublicEmails(domain, txtRecords){
+function rdapEmails(r){ const out=new Set(); try{ for(const ent of (r.entities||[])){ const va = ent.vcardArray && ent.vcardArray[1] || []; for(const it of va){ if(Array.isArray(it) && it[0]==='email'){ const v=(it[3]||'').toString(); if(v) out.add(v); } } } }catch(e){} return [...out]; }
+async function gatherPublicEmails(domain, txtRecords, rdapObj){
   setProgress('Gathering public emails…');
   const base='https://'+domain;
-  const pages=['/','.well-known/security.txt','/security.txt','/contact','/about','/support','/legal','/privacy','/impressum'];
+  const pages=['/','.well-known/security.txt','/security.txt','/contact','/contact-us','/contacts','/about','/team','/careers','/support','/help','/legal','/privacy','/terms','/impressum','/robots.txt','/sitemap.xml'];
   const found=new Set();
-  for(const t of (txtRecords||[])){ const m=t.match(/ru[af]=mailto:([^,\s]+)/gi); if(m){ m.forEach(s=>found.add(s.split(':').pop())); } }
-  try{ const soa=await doh(domain,'SOA'); if(soa && soa[0]){ const p=soa[0].split(' '); if(p[1]){ const rname=p[1].replace(/\.$/,'').replace(/\./g,'@'); if(/@/.test(rname)) found.add(rname); } } }catch(e){}
+
+  // DMARC rua/ruf
+  for(const t of (txtRecords||[])){
+    const m = t.match(/ru[af]=mailto:([^,\s]+)/gi);
+    if(m){ m.forEach(s=>found.add(s.split(':').pop())); }
+  }
+  // SOA RNAME
+  try{
+    const soa = await doh(domain,'SOA');
+    if(soa && soa[0]){
+      const parts=soa[0].split(' ');
+      if(parts[1]){ const rname=parts[1].replace(/\.$/,'').replace(/\./g,'@'); if(/@/.test(rname)) found.add(rname); }
+    }
+  }catch(e){}
+  // RDAP entity emails
+  rdapEmails(rdapObj||{}).forEach(e=>found.add(e));
+
+  // Site pages
   for(const p of pages){
     const html = await getText(base.replace(/\/$/,'')+p);
     if(!html) continue;
     extractEmails(html).forEach(e=>found.add(e));
-    const mailtos=[...html.matchAll(/mailto:([^"'>\s]+)/gi)].map(m=>m[1].split('?')[0]); mailtos.forEach(e=>found.add(e));
+    const mailtos = [...html.matchAll(/mailto:([^"'>\s]+)/gi)].map(m=>m[1].split('?')[0]);
+    mailtos.forEach(e=>found.add(e));
   }
   const list=[...found].sort();
   renderTable('#emails',['Email'], list.map(e=>[e]));
   return list;
 }
 
+// ========= Branding =========
 async function fetchBranding(domain){
   setProgress('Discovering branding…');
   const base='https://'+domain; const html = await getText(base);
   const out=[]; const logos=$('#logos'); if(logos) logos.innerHTML='';
   if(html){
-    const iconHrefs = [...html.matchAll(/<link[^>]+rel=["'](?:icon|shortcut icon|apple-touch-icon)["'][^>]*>/gi)]
-      .map(m=>m[0]).map(tag=> (tag.match(/href=["']([^"']+)/i)||[])[1]).filter(Boolean)
+    const iconTags = [...html.matchAll(/<link[^>]+rel=["'](?:icon|shortcut icon|apple-touch-icon)["'][^>]*>/gi)].map(m=>m[0]);
+    const iconHrefs = iconTags.map(tag=> (tag.match(/href=["']([^"']+)/i)||[])[1]).filter(Boolean)
       .map(h=>{ try{ return new URL(h, base).href; }catch(e){ return h; } });
     const og = (html.match(/property=["']og:image["'][^>]*content=["']([^"']+)/i)||[])[1];
     if(og){ try{ iconHrefs.push(new URL(og, base).href); }catch(e){ iconHrefs.push(og); } }
@@ -480,9 +495,11 @@ async function fetchBranding(domain){
   tb.querySelector('tbody').innerHTML= out.map(([k,u])=>'<tr><td>'+esc(k)+'</td><td><a target="_blank" rel="noreferrer" href="'+esc(u)+'">'+esc(u)+'</a></td></tr>').join('');
   return out;
 }
+
+// ========= Socials =========
 async function findSocials(domain){
   setProgress('Finding social profiles…');
-  const base='https://'+domain; const html=await getText(base);
+  const base='https://'+domain; const html = await getText(base);
   const rows=[]; if(!html){ renderTable('#social',["Network","URL"],[]); return []; }
   function grab(re){ return [...new Set((html.match(re)||[]))]; }
   const links = [
@@ -507,73 +524,7 @@ async function findSocials(domain){
   return rows;
 }
 
-// Toolbox (links for tools that need accounts or block CORS)
-function buildToolbox(domain, brand, AIPs){
-  const e = encodeURIComponent; const ip=(AIPs&&AIPs[0])||''; const box=$('#toolbox'); if(!box) return;
-  const cards = [
-    { title:'WHOIS Lookup', links:[
-      ['ICANN Lookup', `https://lookup.icann.org/en/lookup?name=${e(domain)}`],
-      ['WHOIS.com', `https://www.whois.com/whois/${e(domain)}`],
-      ['DomainTools WHOIS', `https://whois.domaintools.com/${e(domain)}`],
-      ['RDAP (rdap.org)', `https://rdap.org/domain/${e(domain)}`],
-    ]},
-    { title:'DNS Lookup', links:[
-      ['DNSDumpster', `https://dnsdumpster.com/`],
-      ['ViewDNS — DNS records', `https://viewdns.info/dnsrecord/?domain=${e(domain)}`],
-      ['MXToolbox SuperTool', `https://mxtoolbox.com/SuperTool.aspx?domain=${e(domain)}`],
-    ]},
-    { title:'Historical DNS & Snapshots', links:[
-      ['SecurityTrails — history', `https://securitytrails.com/domain/${e(domain)}/history`],
-      ['Wayback Machine', `https://web.archive.org/web/*/${e('http://'+domain)}`],
-    ]},
-    { title:'Subdomain Enumeration (CLIs)', links:[
-      ['Subfinder (GitHub)', 'https://github.com/projectdiscovery/subfinder'],
-      ['Amass (GitHub)', 'https://github.com/OWASP/Amass'],
-      ['Sublist3r (GitHub)', 'https://github.com/aboul3la/Sublist3r'],
-      ['AssetFinder (GitHub)', 'https://github.com/tomnomnom/assetfinder'],
-      ['Findomain (GitHub)', 'https://github.com/Findomain/Findomain'],
-    ]},
-    { title:'SSL/TLS Certificate Analysis', links:[
-      ['SSL Labs (web)', `https://www.ssllabs.com/ssltest/analyze.html?d=${e(domain)}`],
-      ['Censys certificates', `https://search.censys.io/certificates?q=${e(domain)}`],
-      ['crt.sh', `https://crt.sh/?q=%25${e(domain)}%25`],
-    ]},
-    { title:'Threat Intelligence & Reputation', links:[
-      ['VirusTotal (domain)', `https://www.virustotal.com/gui/domain/${e(domain)}`],
-      ['URLVoid', `https://www.urlvoid.com/scan/${e(domain)}/`],
-      [ip ? `AbuseIPDB (${ip})` : 'AbuseIPDB', ip ? `https://www.abuseipdb.com/check/${e(ip)}` : 'https://www.abuseipdb.com/'],
-      ['PhishTank search', `https://www.phishtank.com/search.php?search=${e(domain)}&IsSearch=Y`],
-    ]},
-    { title:'Web Tech Fingerprints', links:[
-      ['Wappalyzer Lookup', `https://www.wappalyzer.com/lookup/${e(domain)}`],
-      ['BuiltWith', `https://builtwith.com/${e(domain)}`],
-      ['WhatWeb (GitHub)', 'https://github.com/urbanadventurer/WhatWeb'],
-      ['Nikto (GitHub)', 'https://github.com/sullo/nikto'],
-    ]},
-    { title:'Email & Social OSINT', links:[
-      ['Hunter.io domain search', `https://hunter.io/domain-search/${e(domain)}`],
-      ['EmailHippo tools', 'https://tools.emailhippo.com/'],
-      ['Sherlock (GitHub)', 'https://github.com/sherlock-project/sherlock'],
-      ['SocialScan (GitHub)', 'https://github.com/iojw/socialscan'],
-    ]},
-    { title:'Geolocation & IP Analysis', links:[
-      [ip ? `IPinfo (${ip})` : 'IPinfo', ip ? `https://ipinfo.io/${e(ip)}` : 'https://ipinfo.io/'],
-      [ip ? `IP2Location (${ip})` : 'IP2Location', ip ? `https://www.ip2location.com/demo/${e(ip)}` : 'https://www.ip2location.com/'],
-      ['MaxMind GeoIP', 'https://dev.maxmind.com/geoip/'],
-    ]},
-    { title:'Logo checks (manual)', links:[
-      ['Google Images', `https://www.google.com/search?tbm=isch&q=${e(brand+' logo')}`],
-      ['Bing Images', `https://www.bing.com/images/search?q=${e(brand+' logo')}`],
-      ['Yandex Images', `https://yandex.com/images/search?text=${e(brand+' logo')}`],
-    ]},
-  ];
-  box.innerHTML = cards.map(card=>{
-    const lis = card.links.map(([label,url])=>`<li><a href="${esc(url)}" target="_blank" rel="noreferrer">${esc(label)}</a></li>`).join('');
-    return `<div class="toolcard"><h3>${esc(card.title)}</h3><ul>${lis}</ul></div>`;
-  }).join('');
-}
-
-// ===== Runner =====
+// ========= Runner =========
 function normalizeInputs(){
   const domainRaw = $('#domain').value.trim();
   const brandRaw = $('#brand').value.trim();
@@ -593,7 +544,7 @@ async function run(){
   ['#tld','#dns','#mail','#geo','#ct','#subs','#emails','#branding','#social','#sslTable'].forEach(sel=>{
     const el=$(sel); if(!el) return; const h=el.querySelector('thead'); const b=el.querySelector('tbody'); if(h) h.innerHTML=''; if(b) b.innerHTML='';
   });
-  $('#rdap').innerHTML=''; $('#logos').innerHTML=''; $('#toolbox').innerHTML=''; $('#sslStatus').innerHTML=''; setProgress(''); setBusy(true);
+  $('#rdap').innerHTML=''; $('#logos').innerHTML=''; $('#sslStatus').innerHTML=''; setProgress(''); setBusy(true);
 
   const results = {input:{domain,brand}, startedAt:new Date().toISOString()};
 
@@ -613,15 +564,11 @@ async function run(){
     }
 
     if(domain){
-      // multi-source subdomains
       await enumerateSubdomains(domain);
-      // SSL Labs
       await sslLabs(domain);
-      // branding + emails + socials + toolbox
       try{ await fetchBranding(domain); }catch(e){}
-      try{ await gatherPublicEmails(domain, (results.domain&&results.domain.TXT)||[]); }catch(e){}
+      try{ await gatherPublicEmails(domain, (results.domain&&results.domain.TXT)||[], (results.domain&&results.domain.rdfull)||{}); }catch(e){}
       try{ await findSocials(domain); }catch(e){}
-      try{ buildToolbox(domain, brand, results.domain && results.domain.A); }catch(e){}
     }
 
     const hasMX = results.domain && results.domain.MX && results.domain.MX.length>0;
