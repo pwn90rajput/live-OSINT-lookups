@@ -18,11 +18,14 @@
     label{display:block;color:var(--muted);font-size:13px;margin:0 0 4px}
     input{padding:10px;border-radius:10px;border:1px solid #23325a;background:#0b1430;color:var(--txt)}
     button{padding:10px 14px;border-radius:10px;border:0;background:var(--accent);color:#001040;font-weight:600;cursor:pointer}
+    button[disabled]{opacity:.6;cursor:not-allowed}
     button.ghost{background:transparent;color:var(--accent);border:1px solid var(--accent)}
     .muted{color:var(--muted)}
     .small{font-size:13px}
     .tbl{width:100%;border-collapse:collapse}
     .tbl th,.tbl td{padding:9px;border-bottom:1px solid #22325a;vertical-align:top}
+    /* Reliable sticky headers across browsers */
+    .tbl thead th{position:sticky;top:0;background:var(--card);z-index:1}
     .tbl tr:hover{background:#101f45}
     .kv td{padding:7px;border-bottom:1px solid #22325a}
     .summary{display:flex;flex-wrap:wrap;gap:10px}
@@ -33,7 +36,6 @@
     .row{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
     .spinner{width:16px;height:16px;border:2px solid #2a3a6a;border-top-color:var(--accent);border-radius:50%;animation:spin .8s linear infinite;display:inline-block}
     @keyframes spin{to{transform:rotate(360deg)}}
-    .sticky{position:sticky;top:0;background:var(--card)}
     .pill{border:1px solid #23325a;border-radius:10px;padding:4px 8px}
     a{color:#9ec0ff}
   </style>
@@ -46,20 +48,20 @@
     </header>
 
     <section class="card">
-      <form id="f" class="grid">
+      <form id="f" class="grid" autocomplete="off">
         <div>
-          <label>Domain (FQDN)</label>
-          <input id="domain" placeholder="example.com"/>
+          <label for="domain">Domain (FQDN)</label>
+          <input id="domain" type="text" placeholder="example.com" inputmode="url" spellcheck="false" />
         </div>
         <div>
-          <label>Brand (no TLD)</label>
-          <input id="brand" placeholder="dell"/>
+          <label for="brand">Brand (no TLD)</label>
+          <input id="brand" type="text" placeholder="dell" inputmode="text" spellcheck="false" />
         </div>
-        <button type="submit">Scan</button>
-        <button type="button" id="demo" class="ghost">Demo</button>
+        <button type="submit" id="scanBtn">Scan</button>
+        <button type="button" id="demo" class="ghost" title="Run a demo scan">Demo</button>
         <div class="row">
-          <button type="button" id="dljson" class="ghost">Download JSON</button>
-          <button type="button" id="dlcsv" class="ghost">Download CSV</button>
+          <button type="button" id="dljson" class="ghost" title="Download last results as JSON">Download JSON</button>
+          <button type="button" id="dlcsv" class="ghost" title="Download brand sweep as CSV">Download CSV</button>
         </div>
       </form>
       <p class="muted small">Tip: <b>Brand‑only</b> mode sweeps many TLDs (e.g., dell.in, dell.ru, dell.xyz) and harvests CT lookalikes. All sources are free; some rate‑limits apply.</p>
@@ -68,12 +70,12 @@
     <section class="card">
       <h2>Summary</h2>
       <div id="summary" class="summary"></div>
-      <div id="progress" class="muted small"></div>
+      <div id="progress" class="muted small" aria-live="polite"></div>
     </section>
 
     <section class="card">
       <h2>Brand TLD Sweep</h2>
-      <table id="tld" class="tbl"></table>
+      <table id="tld" class="tbl"><thead></thead><tbody></tbody></table>
     </section>
 
     <section class="card">
@@ -83,27 +85,27 @@
 
     <section class="card">
       <h2>DNS Records (Domain)</h2>
-      <table id="dns" class="tbl"></table>
+      <table id="dns" class="tbl"><thead></thead><tbody></tbody></table>
     </section>
 
     <section class="card">
       <h2>Mail Security</h2>
-      <table id="mail" class="tbl"></table>
+      <table id="mail" class="tbl"><thead></thead><tbody></tbody></table>
     </section>
 
     <section class="card">
       <h2>IP Geo / ASN</h2>
-      <table id="geo" class="tbl"></table>
+      <table id="geo" class="tbl"><thead></thead><tbody></tbody></table>
     </section>
 
     <section class="card">
       <h2>Certificate Transparency — Lookalikes</h2>
-      <table id="ct" class="tbl"></table>
+      <table id="ct" class="tbl"><thead></thead><tbody></tbody></table>
     </section>
 
     <section class="card">
       <h2>Subdomains</h2>
-      <table id="subs" class="tbl"></table>
+      <table id="subs" class="tbl"><thead></thead><tbody></tbody></table>
     </section>
 
     <footer class="card">
@@ -117,23 +119,39 @@
 <script>
 // ===== Utilities =====
 const $ = (s)=>document.querySelector(s);
-const esc = (s)=> (s??'').toString().replace(/[&<>"']/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m]));
+const esc = (s)=> (s??'').toString().replace(/[&<>"']/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;','\'':'&#39;'}[m]));
 
-// CSV/JSON downloads
+// CSV/JSON downloads with cleanup
 let LAST = {};
 function downloadJSON(obj, name='osint_results.json'){
-  const blob = new Blob([JSON.stringify(obj,null,2)], {type:'application/json'});
-  const a=document.createElement('a'); a.href=URL.createObjectURL(blob); a.download=name; a.click();
+  try{
+    const blob = new Blob([JSON.stringify(obj,null,2)], {type:'application/json'});
+    const a=document.createElement('a');
+    a.href=URL.createObjectURL(blob);
+    a.download=name;
+    document.body.appendChild(a);
+    a.click();
+    URL.revokeObjectURL(a.href);
+    a.remove();
+  }catch(e){ alert('Could not download JSON'); }
 }
 function toCSV(rows, headers){
   const all=[headers,...rows];
   return all.map(r=>r.map(x=>{
-    const s=(x??'').toString(); return /[",\\n]/.test(s)? '"'+s.replace(/"/g,'""')+'"' : s;
-  }).join(',')).join('\\n');
+    const s=(x??'').toString(); return /[",\n]/.test(s)? '"'+s.replace(/"/g,'""')+'"' : s;
+  }).join(',')).join('\n');
 }
 function downloadCSV(rows, headers, name='tld_sweep.csv'){
-  const blob = new Blob([toCSV(rows, headers)], {type:'text/csv'});
-  const a=document.createElement('a'); a.href=URL.createObjectURL(blob); a.download=name; a.click();
+  try{
+    const blob = new Blob([toCSV(rows, headers)], {type:'text/csv'});
+    const a=document.createElement('a');
+    a.href=URL.createObjectURL(blob);
+    a.download=name;
+    document.body.appendChild(a);
+    a.click();
+    URL.revokeObjectURL(a.href);
+    a.remove();
+  }catch(e){ alert('Could not download CSV'); }
 }
 
 // Fetch JSON with best-effort CORS fallback
@@ -143,15 +161,19 @@ async function getJSON(url){
     if(r.ok){
       const ct = r.headers.get('content-type')||'';
       if(ct.includes('application/json')) return await r.json();
-      return JSON.parse(await r.text());
+      const txt = await r.text();
+      return JSON.parse(txt);
     }
-  }catch(e){}
+  }catch(e){ /* fall through */ }
   // read-only mirror fallback
   try{
-    const proxy = 'https://r.jina.ai/http://' + url.replace(/^https?:\\/\\//,'');
+    const proxy = 'https://r.jina.ai/http://' + url.replace(/^https?:\/\//,'');
     const r2 = await fetch(proxy);
     if(!r2.ok) throw 0;
-    return JSON.parse(await r2.text());
+    const txt2 = await r2.text();
+    // crt.sh sometimes returns NDJSON-like; wrap if needed
+    const safe = txt2.trim().split(/\n(?=\{)/).length>1 ? '['+txt2.trim().split(/\n(?=\{)/).join(',')+']' : txt2;
+    return JSON.parse(safe);
   }catch(e){
     throw new Error('Fetch failed: '+url);
   }
@@ -166,9 +188,13 @@ async function doh(name, type='A'){
     const j=await r.json();
     return (j.Answer||[]).map(a=>a.data);
   }catch(_){
-    const gg='https://dns.google/resolve?name='+encodeURIComponent(name)+'&type='+encodeURIComponent(type);
-    const r2=await fetch(gg); if(!r2.ok) return []; const j2=await r2.json();
-    return (j2.Answer||[]).map(a=>a.data);
+    try{
+      const gg='https://dns.google/resolve?name='+encodeURIComponent(name)+'&type='+encodeURIComponent(type);
+      const r2=await fetch(gg,{headers:{'accept':'application/dns-json'}});
+      if(!r2.ok) return [];
+      const j2=await r2.json();
+      return (j2.Answer||[]).map(a=>a.data);
+    }catch(e){ return []; }
   }
 }
 const dmarcFrom=(arr)=> (arr||[]).find(t=>t.includes('v=DMARC1'))||null;
@@ -178,7 +204,7 @@ const spfFrom=(arr)=> (arr||[]).find(t=>t.includes('v=spf1'))||null;
 async function rdap(domain){ try{ return await getJSON('https://rdap.org/domain/'+encodeURIComponent(domain)); }catch(e){ return {}; }}
 
 // Geo
-async function geo(ip){ const r=await fetch('https://ipwho.is/'+encodeURIComponent(ip)); if(!r.ok) return {}; return r.json();}
+async function geo(ip){ try{ const r=await fetch('https://ipwho.is/'+encodeURIComponent(ip)); if(!r.ok) return {}; return r.json(); }catch(e){ return {}; } }
 
 // CT logs (crt.sh JSON, mirrored)
 async function crt(needle){
@@ -186,8 +212,9 @@ async function crt(needle){
   try{
     const data = await getJSON(url);
     const set=new Set(), out=[];
-    for(const rec of (Array.isArray(data)?data:[data])){
-      const names=(rec.name_value||'').split('\\n').map(s=>s.replace(/^\\*\\.?/,'').trim().toLowerCase()).filter(Boolean);
+    const arr = Array.isArray(data)? data : (data? [data] : []);
+    for(const rec of arr){
+      const names=(rec.name_value||'').split('\n').map(s=>s.replace(/^\*\.?/,'').trim().toLowerCase()).filter(Boolean);
       for(const n of names){ if(!set.has(n)){ set.add(n); out.push(n);} }
     }
     return out;
@@ -196,44 +223,48 @@ async function crt(needle){
 
 // Subdomains (community API)
 async function subdomains(domain){
+  const url='https://sonar.omnisint.io/subdomains/'+encodeURIComponent(domain);
   try{
-    const r=await fetch('https://sonar.omnisint.io/subdomains/'+encodeURIComponent(domain));
-    if(r.ok) return r.json(); throw 0;
+    const r=await fetch(url);
+    if(r.ok) return r.json();
+    throw 0;
   }catch(_){
-    try{ return await getJSON('https://sonar.omnisint.io/subdomains/'+encodeURIComponent(domain)); }
+    try{ return await getJSON(url); }
     catch(e){ return []; }
   }
 }
 
 // Render helpers
 function renderTable(sel, headers, rows){
-  const el=$(sel);
-  el.innerHTML = '<tr class="sticky">'+headers.map(h=>'<th>'+esc(h)+'</th>').join('')+'</tr>' +
-    (rows.length? rows.map(r=>'<tr>'+r.map(c=>'<td>'+esc(c??'')+'</td>').join('')+'</tr>').join('')
-               : '<tr><td colspan="'+headers.length+'" class="muted">No data</td></tr>');
+  const table=$(sel);
+  const thead=table.querySelector('thead');
+  const tbody=table.querySelector('tbody');
+  if(thead) thead.innerHTML = '<tr>'+headers.map(h=>'<th>'+esc(h)+'</th>').join('')+'</tr>';
+  if(tbody) tbody.innerHTML = rows.length? rows.map(r=>'<tr>'+r.map(c=>'<td>'+esc(c??'')+'</td>').join('')+'</tr>').join('') : '<tr><td colspan="'+headers.length+'" class="muted">No data</td></tr>';
 }
-function kv(tbodySel, rows){ $(tbodySel).innerHTML = rows.map(([k,v])=>'<tr><td><b>'+esc(k)+'</b></td><td>'+esc(v??'')+'</td></tr>').join(''); }
+function kv(tbodySel, rows){ const el=$(tbodySel); el.innerHTML = rows.map(([k,v])=>'<tr><td><b>'+esc(k)+'</b></td><td>'+esc(v??'')+'</td></tr>').join(''); }
 function badge(type, text){ return '<span class="badge '+type+'">'+esc(text)+'</span>'; }
-function sim(a,b){ a=a.toLowerCase(); b=b.toLowerCase(); const sa=new Set(a), sb=new Set(b); return sa.size&&sb.size? [...sa].filter(x=>sb.has(x)).length / new Set([...sa,...sb]).size : 0; }
+function sim(a,b){ a=(a||'').toLowerCase(); b=(b||'').toLowerCase(); const sa=new Set(a), sb=new Set(b); return sa.size&&sb.size? [...sa].filter(x=>sb.has(x)).length / new Set([...sa,...sb]).size : 0; }
 function risk(score){ if(score>=0.75) return badge('bad','HIGH '+score.toFixed(2)); if(score>=0.45) return badge('warn','MEDIUM '+score.toFixed(2)); return badge('good','LOW '+score.toFixed(2)); }
 const TLDS = ["com","net","org","io","co","ai","app","dev","site","online","info","biz","xyz","cloud","shop","in","ru","de","fr","it","es","nl","pl","se","no","fi","dk","eu","uk","co.uk","com.au","ca","jp","kr","vn","sg","hk","tw","br","mx","ar","za","tr","ua","cz","sk","ro","hu","pt","ie","ch","at","be","gr","lt","lv","ee","il","sa","ae","qa","kw","nz"];
 
 // ===== Scan logic =====
 let RESULTS = {};
+let RUNNING = false;
 function setProgress(txt){ $('#progress').innerHTML = txt? '<span class="spinner"></span> '+esc(txt) : ''; }
+function setBusy(b){ RUNNING=b; $('#scanBtn').disabled=b; $('#demo').disabled=b; }
 
 async function sweepBrand(brand){
   const targets = TLDS.map(tld=> brand+'.'+tld);
   const rows=[]; let done=0;
-  // Simple concurrency
-  const batch=6;
+  const batch=6; // simple concurrency
   async function worker(list){
     for(const d of list){
       setProgress('Brand sweep '+(++done)+'/'+targets.length+': '+d);
-      // quick A/MX
-      let A=[], MX=[]; try{ A=await doh(d,'A'); }catch(e){} try{ MX=await doh(d,'MX'); }catch(e){}
+      let A=[], MX=[]; try{ A=await doh(d,'A'); }catch(e){}
+      try{ MX=await doh(d,'MX'); }catch(e){}
       // rdap meta
-      let created='', registrar=''; 
+      let created='', registrar='';
       try{
         const r = await rdap(d);
         const ev = (r.events||[]);
@@ -242,16 +273,17 @@ async function sweepBrand(brand){
       }catch(e){}
       // geo first A
       let country='', asn='', isp='';
-      if(A[0]){
+      if(A && A[0]){
         try{
           const g=await geo(A[0]);
           country=g.country||''; asn=g.connection?('AS'+g.connection.asn):(g.asn||''); isp=g.connection?.isp||g.isp||'';
         }catch(e){}
       }
-      rows.push([d, created?created.slice(0,10):'', registrar, A.length?'Yes':'No', MX.length?'Yes':'No', A[0]||'', country, asn, isp]);
+      rows.push([d, created?created.slice(0,10):'', registrar, A && A.length? 'Yes':'No', MX && MX.length? 'Yes':'No', (A && A[0])||'', country, asn, isp]);
     }
   }
-  const chunks = Array.from({length:batch}, (_,i)=> targets.filter((_,idx)=> idx%batch===i));
+  const chunks = Array.from({length:batch}, (_,_i)=> []);
+  targets.forEach((t,i)=> chunks[i%batch].push(t));
   await Promise.all(chunks.map(worker));
   rows.sort((a,b)=> (b[4]==='Yes') - (a[4]==='Yes') || (b[1]||'').localeCompare(a[1]||''));
   renderTable('#tld', ["Domain","Created","Registrar","A?","MX?","First A","Country","ASN","ISP"], rows);
@@ -259,18 +291,19 @@ async function sweepBrand(brand){
 }
 
 async function scanDomain(domain){
-  const A = await doh(domain,'A');
-  const AAAA = await doh(domain,'AAAA');
-  const MX = await doh(domain,'MX');
-  const NS = await doh(domain,'NS');
-  const TXT = await doh(domain,'TXT');
-  const DMARCtxt = await doh('_dmarc.'+domain,'TXT');
+  let A=[],AAAA=[],MX=[],NS=[],TXT=[],DMARCtxt=[];
+  try{ A = await doh(domain,'A'); }catch(e){}
+  try{ AAAA = await doh(domain,'AAAA'); }catch(e){}
+  try{ MX = await doh(domain,'MX'); }catch(e){}
+  try{ NS = await doh(domain,'NS'); }catch(e){}
+  try{ TXT = await doh(domain,'TXT'); }catch(e){}
+  try{ DMARCtxt = await doh('_dmarc.'+domain,'TXT'); }catch(e){}
   const SPF = spfFrom(TXT), DMARC = dmarcFrom(DMARCtxt);
   renderTable('#dns', ['Type','Values'], [
-    ['A / AAAA', [...A,...AAAA].join('\\n')],
-    ['MX', MX.join('\\n')],
-    ['NS', NS.join('\\n')],
-    ['TXT', TXT.join('\\n')],
+    ['A / AAAA', [...(A||[]),...(AAAA||[])].join('\n')],
+    ['MX', (MX||[]).join('\n')],
+    ['NS', (NS||[]).join('\n')],
+    ['TXT', (TXT||[]).join('\n')],
   ]);
   renderTable('#mail', ['Control','Value'], [
     ['SPF', SPF||'Missing'],
@@ -281,7 +314,7 @@ async function scanDomain(domain){
   const ev = r.events||[];
   let created = (ev.find(e=>e.eventAction==='registration')||{}).eventDate || '';
   let changed = (ev.find(e=>e.eventAction==='last changed')||{}).eventDate || '';
-  const registrar = r.registrar && (r.registrar.name || r.registrar.email) || '';
+  const registrar = (r.registrar && (r.registrar.name || r.registrar.email)) || '';
   const status = (r.status||[]).join(', ');
   let privacy=false;
   for(const ent of (r.entities||[])){
@@ -291,7 +324,7 @@ async function scanDomain(domain){
   kv('#rdap', [['Registrar', registrar], ['Registered', created], ['Last changed', changed], ['Status', status], ['Privacy/Proxy', privacy?'Yes':'No']]);
   // geo
   const rows=[['IP','Country','ASN','ISP']];
-  for(const ip of A.slice(0,5)){
+  for(const ip of (A||[]).slice(0,5)){
     try{
       const g=await geo(ip);
       rows.push([ip, g.country||'', g.connection?('AS'+g.connection.asn):(g.asn||''), g.connection?.isp||g.isp||'']);
@@ -300,66 +333,89 @@ async function scanDomain(domain){
   renderTable('#geo', rows.shift(), rows);
   // subs
   const subs = await subdomains(domain);
-  renderTable('#subs', ['Subdomain'], subs.map(s=>[s]));
+  renderTable('#subs', ['Subdomain'], (subs||[]).map(s=>[s]));
   return {A,MX,created,DMARC,registrar};
 }
 
 async function scanCT(needle, domain){
   const names = await crt(needle);
-  const cleaned = names.filter(n => n!==domain);
+  const cleaned = (names||[]).filter(n => !domain || n!==domain);
   const rows = cleaned.map(n=>[n, sim(n, needle).toFixed(3)]).sort((a,b)=> parseFloat(b[1])-parseFloat(a[1])).slice(0,200);
   renderTable('#ct', ['Name','Similarity'], rows);
   return rows;
 }
 
+function normalizeDomain(d){
+  return d.replace(/^https?:\/\//,'').replace(/\/$/,'').toLowerCase();
+}
+function normalizeBrand(b){
+  return b.replace(/[^a-z0-9-]/gi,'').toLowerCase();
+}
+
 async function run(){
-  const domain = $('#domain').value.trim().toLowerCase();
-  const brand = $('#brand').value.trim().toLowerCase();
+  if(RUNNING) return; // prevent overlapping runs
+  const domainRaw = $('#domain').value.trim();
+  const brandRaw = $('#brand').value.trim();
+  const domain = domainRaw? normalizeDomain(domainRaw) : '';
+  const brand = brandRaw? normalizeBrand(brandRaw) : '';
   if(!domain && !brand){ alert('Enter a Domain and/or Brand'); return; }
 
   // clear
   $('#summary').innerHTML = '<span class="spinner"></span> Running lookups…';
-  ['#tld','#rdap','#dns','#mail','#geo','#ct','#subs'].forEach(sel=> $(sel).innerHTML='');
+  ['#tld','#dns','#mail','#geo','#ct','#subs'].forEach(sel=> {
+    const el=$(sel); const h=el.querySelector('thead'); const b=el.querySelector('tbody');
+    if(h) h.innerHTML=''; if(b) b.innerHTML='';
+  });
+  $('#rdap').innerHTML='';
   setProgress('');
+  setBusy(true);
 
   const results = {input:{domain,brand}, startedAt:new Date().toISOString()};
 
-  // Brand sweep first
-  if(brand){
-    const rows = await sweepBrand(brand);
-    results.tldSweep = rows;
+  try{
+    // Brand sweep first
+    if(brand){
+      const rows = await sweepBrand(brand);
+      results.tldSweep = rows;
+    }
+
+    // Domain details
+    let dres = {};
+    if(domain){
+      setProgress('Domain lookups for '+domain+'…');
+      dres = await scanDomain(domain);
+      results.domain = dres;
+    }
+
+    // CT lookalikes
+    const needle = brand || (domain? domain.split('.')[0] : '');
+    if(needle){
+      setProgress('CT log search for "'+needle+'"…');
+      const ctrows = await scanCT(needle, domain);
+      results.ct = ctrows;
+    }
+
+    // Summary
+    const hasMX = results.domain && results.domain.MX && results.domain.MX.length>0;
+    const dmarcMissing = results.domain ? !(results.domain.DMARC) : false;
+    const recent = results.domain && results.domain.created ? (new Date(results.domain.created) > new Date(Date.now()-1000*60*60*24*30)) : false;
+    let score = 0; if(hasMX) score += .25; if(dmarcMissing) score += .25; if(recent) score += .15;
+    const ctHigh = (results.ct||[]).some(r=> parseFloat(r[1])>0.7);
+    if(ctHigh) score += .2;
+    $('#summary').innerHTML = risk(score) +
+      (domain? ' '+ (hasMX? '<span class="badge warn">MX present</span>' : '<span class="badge good">No MX</span>') : '') +
+      (domain? ' '+ (dmarcMissing? '<span class="badge bad">DMARC missing</span>' : '<span class="badge good">DMARC present</span>') : '');
+
+    setProgress('');
+    results.finishedAt = new Date().toISOString();
+    LAST = results;
+  }catch(err){
+    console.error(err);
+    setProgress('');
+    $('#summary').innerHTML = '<span class="badge bad">Error</span> '+esc(err.message||'Run failed');
+  }finally{
+    setBusy(false);
   }
-
-  // Domain details
-  let dres = {};
-  if(domain){
-    setProgress('Domain lookups for '+domain+'…');
-    dres = await scanDomain(domain);
-    results.domain = dres;
-  }
-
-  // CT lookalikes
-  const needle = brand || (domain? domain.split('.')[0] : '');
-  if(needle){
-    setProgress('CT log search for "'+needle+'”…');
-    const ctrows = await scanCT(needle, domain);
-    results.ct = ctrows;
-  }
-
-  // Summary
-  const hasMX = dres.MX && dres.MX.length>0;
-  const dmarcMissing = dres.DMARC? false : true;
-  const recent = dres.created ? (new Date(dres.created) > new Date(Date.now()-1000*60*60*24*30)) : false;
-  let score = 0; if(hasMX) score += .25; if(dmarcMissing) score += .25; if(recent) score += .15;
-  const ctHigh = (results.ct||[]).some(r=> parseFloat(r[1])>0.7);
-  if(ctHigh) score += .2;
-  $('#summary').innerHTML = risk(score) +
-    (domain? ' '+ (hasMX? '<span class="badge warn">MX present</span>' : '<span class="badge good">No MX</span>') : '') +
-    (domain? ' '+ (dmarcMissing? '<span class="badge bad">DMARC missing</span>' : '<span class="badge good">DMARC present</span>') : '');
-
-  setProgress('');
-  results.finishedAt = new Date().toISOString();
-  LAST = results;
 }
 
 // Wire up
@@ -368,6 +424,7 @@ $('#demo').addEventListener('click', ()=>{ $('#domain').value='congruex.com'; $(
 $('#dljson').addEventListener('click', ()=> downloadJSON(LAST));
 $('#dlcsv').addEventListener('click', ()=> {
   const rows = (LAST.tldSweep||[]);
+  if(!rows.length){ alert('No brand sweep data yet. Enter a brand and run a scan.'); return; }
   downloadCSV(rows, ["Domain","Created","Registrar","A?","MX?","First A","Country","ASN","ISP"]);
 });
 </script>
