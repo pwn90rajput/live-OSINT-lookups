@@ -1,12 +1,10 @@
-# Write the provided (fixed/working) dashboard to /mnt/data/index.html
-from pathlib import Path
-
-html = r"""<!doctype html>
+\
+<!doctype html>
 <html lang="en">
 <head>
   <meta charset="utf-8"/>
   <meta name="viewport" content="width=device-width, initial-scale=1"/>
-  <title>OSINT Monitor — Full Dashboard (Patched)</title>
+  <title>OSINT Monitor — Full Dashboard (Patched • Stable)</title>
   <style>
     :root { --bg:#0b1020; --card:#0f1a34; --txt:#e7ecff; --muted:#a9b4d6; --accent:#7aa2ff; --good:#1bd760; --warn:#ffbd2e; --bad:#ff5c77; }
     *{box-sizing:border-box}
@@ -48,8 +46,8 @@ html = r"""<!doctype html>
 <body>
   <div class="wrap">
     <header>
-      <h1>OSINT Monitor — Full Dashboard (Patched)</h1>
-      <p class="sub">Live client-side recon. Uses DoH, RDAP, CT logs, multi-source subdomains, SSL Labs, IP & BGP intel, public emails (improved), favicon hash, typosquats, branding, socials, takeover hints, and more. No keys; rate-limits handled.</p>
+      <h1>OSINT Monitor — Full Dashboard (Patched • Stable)</h1>
+      <p class="sub">Live client-side recon. Uses DoH, RDAP, CT logs, multi-source subdomains, SSL Labs, IP & BGP intel, public emails, favicon hash, typosquats, branding, socials, takeover hints, and more. No keys; rate-limits handled.</p>
     </header>
 
     <section class="card">
@@ -60,7 +58,7 @@ html = r"""<!doctype html>
         </div>
         <div>
           <label for="brand">Brand (no TLD)</label>
-          <input id="brand" type="text" placeholder="dell" inputmode="text" spellcheck="false" />
+          <input id="brand" type="text" placeholder="example" inputmode="text" spellcheck="false" />
         </div>
         <button type="submit" id="scanBtn">Scan</button>
         <button type="button" id="demo" class="ghost">Demo</button>
@@ -173,16 +171,16 @@ html = r"""<!doctype html>
   </div>
 
 <script>
-'use strict';
 // ===== Utilities =====
 const $ = (s)=>document.querySelector(s);
-const esc = (s)=> (s??'').toString().replace(/[&<>"']/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',\"'\":'&#39;'}[m]));
+// IMPORTANT: keep esc exactly like this to avoid syntax issues that break all JS.
+const esc = (s)=> (s??'').toString().replace(/[&<>"']/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m]));
 const sleep = (ms)=>new Promise(r=>setTimeout(r,ms));
-const escapeRE=(s)=>s.replace(/[.*+?^${}()|[\\]\\\\]/g,'\\\\$&'); // double-escaped so it survives templating
+const escapeRE=(s)=>s.replace(/[.*+?^${}()|[\\]\\\\]/g,'\\\\$&'); // safe escaping for RegExp
 let LAST = {}, RUNNING=false;
 
-function setProgress(txt){ const p=document.getElementById('progress'); if(p){ p.innerHTML = txt? '<span class=\"spinner\"></span> '+esc(txt) : ''; } }
-function setBusy(b){ RUNNING=b; const sb=document.getElementById('scanBtn'); const dm=document.getElementById('demo'); if(sb) sb.disabled=b; if(dm) dm.disabled=b; }
+function setProgress(txt){ $('#progress').innerHTML = txt? '<span class="spinner"></span> '+esc(txt) : ''; }
+function setBusy(b){ RUNNING=b; $('#scanBtn').disabled=b; $('#demo').disabled=b; }
 
 function downloadJSON(obj, name='osint_results.json'){
   try{ const blob = new Blob([JSON.stringify(obj,null,2)], {type:'application/json'});
@@ -191,7 +189,7 @@ function downloadJSON(obj, name='osint_results.json'){
 }
 function toCSV(rows, headers){
   const all=[headers,...rows];
-  return all.map(r=>r.map(x=>{ const s=(x??'').toString(); return /[\",\\n]/.test(s)? '\"'+s.replace(/\"/g,'\"\"')+'\"' : s; }).join(',')).join('\\n');
+  return all.map(r=>r.map(x=>{ const s=(x??'').toString(); return /[",\\n]/.test(s)? '\"'+s.replace(/\"/g,'\"\"')+'\"' : s; }).join(',')).join('\\n');
 }
 function downloadCSV(rows, headers, name='tld_sweep.csv'){
   try{ const blob = new Blob([toCSV(rows, headers)], {type:'text/csv'});
@@ -199,15 +197,29 @@ function downloadCSV(rows, headers, name='tld_sweep.csv'){
   }catch(e){ alert('Could not download CSV'); }
 }
 
+// Fetch with timeout + CORS mirror fallback
+async function fetchWithTimeout(url, opts={}, timeoutMs=15000){
+  const ctrl = new AbortController();
+  const t = setTimeout(()=>ctrl.abort(), timeoutMs);
+  try{
+    const r = await fetch(url, {...opts, signal: ctrl.signal});
+    clearTimeout(t);
+    return r;
+  }catch(e){
+    clearTimeout(t);
+    throw e;
+  }
+}
+
 // Robust JSON fetch with CORS-free mirror
 async function getJSON(url){
   try{
-    const r = await fetch(url, {headers:{'accept':'application/json'}});
+    const r = await fetchWithTimeout(url, {headers:{'accept':'application/json'}});
     if(r.ok){ const ct=r.headers.get('content-type')||''; if(ct.includes('application/json')) return await r.json(); return JSON.parse(await r.text()); }
   }catch(e){}
   try{
     const proxy = 'https://r.jina.ai/http/' + url.replace(/^https?:\\/\\//,'');
-    const r2 = await fetch(proxy); if(!r2.ok) throw 0;
+    const r2 = await fetchWithTimeout(proxy, {}, 20000); if(!r2.ok) throw 0;
     const txt2 = await r2.text();
     const safe = txt2.trim().split(/\\n(?=\\{)/).length>1 ? '['+txt2.trim().split(/\\n(?=\\{)/).join(',')+']' : txt2;
     return JSON.parse(safe);
@@ -215,17 +227,17 @@ async function getJSON(url){
 }
 // TEXT (HTML) via mirror
 async function getText(url){
-  try{ const proxy='https://r.jina.ai/http/' + url.replace(/^https?:\\/\\//,''); const r=await fetch(proxy); if(!r.ok) return ''; return await r.text(); }
+  try{ const proxy='https://r.jina.ai/http/' + url.replace(/^https?:\\/\\//,''); const r=await fetchWithTimeout(proxy, {}, 20000); if(!r.ok) return ''; return await r.text(); }
   catch(e){ return ''; }
 }
 
 // ===== DoH / helpers =====
 async function doh(name, type='A'){
   const cf='https://cloudflare-dns.com/dns-query?name='+encodeURIComponent(name)+'&type='+encodeURIComponent(type);
-  try{ const r=await fetch(cf,{headers:{'accept':'application/dns-json'}}); if(!r.ok) throw 0; const j=await r.json(); return (j.Answer||[]).map(a=>a.data); }
+  try{ const r=await fetchWithTimeout(cf,{headers:{'accept':'application/dns-json'}}, 12000); if(!r.ok) throw 0; const j=await r.json(); return (j.Answer||[]).map(a=>a.data); }
   catch(_){
     try{ const gg='https://dns.google/resolve?name='+encodeURIComponent(name)+'&type='+encodeURIComponent(type);
-      const r2=await fetch(gg,{headers:{'accept':'application/dns-json'}}); if(!r2.ok) return []; const j2=await r2.json(); return (j2.Answer||[]).map(a=>a.data);
+      const r2=await fetchWithTimeout(gg,{headers:{'accept':'application/dns-json'}}, 12000); if(!r2.ok) return []; const j2=await r2.json(); return (j2.Answer||[]).map(a=>a.data);
     }catch(e){ return []; }
   }
 }
@@ -234,7 +246,7 @@ const spfFrom=(arr)=> (arr||[]).find(t=>t.includes('v=spf1'))||null;
 
 // ===== Core data sources =====
 async function rdap(domain){ try{ return await getJSON('https://rdap.org/domain/'+encodeURIComponent(domain)); }catch(e){ return {}; } }
-async function geo(ip){ try{ const r=await fetch('https://ipwho.is/'+encodeURIComponent(ip)); if(!r.ok) return {}; return r.json(); }catch(e){ return {}; } }
+async function geo(ip){ try{ const r=await fetchWithTimeout('https://ipwho.is/'+encodeURIComponent(ip), {}, 12000); if(!r.ok) return {}; return r.json(); }catch(e){ return {}; } }
 async function ipinfo(ip){ try{ return await getJSON('https://ipinfo.io/'+encodeURIComponent(ip)+'/json'); }catch(e){ return {}; } }
 async function bgpview(ip){ try{ return await getJSON('https://api.bgpview.io/ip/'+encodeURIComponent(ip)); }catch(e){ return {}; } }
 async function shodanInternetDB(ip){ try{ return await getJSON('https://internetdb.shodan.io/'+encodeURIComponent(ip)); }catch(e){ return {}; } }
@@ -254,15 +266,13 @@ async function crt(needle){
 // ===== Render =====
 function renderTable(sel, headers, rows){
   const table=$(sel), thead=table.querySelector('thead'), tbody=table.querySelector('tbody');
-  if(!table){ return; }
   if(thead) thead.innerHTML='<tr>'+headers.map(h=>'<th>'+esc(h)+'</th>').join('')+'</tr>';
   if(tbody) tbody.innerHTML= rows.length? rows.map(r=>'<tr>'+r.map(c=>'<td>'+esc(c??'')+'</td>').join('')+'</tr>').join('')
                                          : '<tr><td colspan="'+headers.length+'" class="muted">No data</td></tr>';
 }
-function kv(sel, rows){ const el=$(sel); if(!el) return; el.innerHTML=rows.map(([k,v])=>'<tr><td><b>'+esc(k)+'</b></td><td>'+esc(v??'')+'</td></tr>').join(''); }
+function kv(sel, rows){ $(sel).innerHTML=rows.map(([k,v])=>'<tr><td><b>'+esc(k)+'</b></td><td>'+esc(v??'')+'</td></tr>').join(''); }
 function badge(type, text){ return '<span class="badge '+type+'">'+esc(text)+'</span>'; }
 function sim(a,b){ a=(a||'').toLowerCase(); b=(b||'').toLowerCase(); const sa=new Set(a), sb=new Set(b); return sa.size&&sb.size? [...sa].filter(x=>sb.has(x)).length / new Set([...sa,...sb]).size : 0; }
-function risk(score){ if(score>=0.75) return badge('bad','HIGH '+score.toFixed(2)); if(score>=0.45) return badge('warn','MEDIUM '+score.toFixed(2)); return badge('good','LOW '+score.toFixed(2)); }
 const TLDS=["com","net","org","io","co","ai","app","dev","site","online","info","biz","xyz","cloud","shop","in","ru","de","fr","it","es","nl","pl","se","no","fi","dk","eu","uk","co.uk","com.au","ca","jp","kr","vn","sg","hk","tw","br","mx","ar","za","tr","ua","cz","sk","ro","hu","pt","ie","ch","at","be","gr","lt","lv","ee","il","sa","ae","qa","kw","nz"];
 
 // ===== Brand sweep =====
@@ -400,7 +410,7 @@ async function censysCerts(domain){
 
 // ===== Subdomain enumeration (multi-source) =====
 const subSources = {
-  omnisint: async d=>{ try{ const r=await fetch('https://sonar.omnisint.io/subdomains/'+encodeURIComponent(d)); if(r.ok) return r.json(); }catch{} try{ return await getJSON('https://sonar.omnisint.io/subdomains/'+encodeURIComponent(d)); }catch{} return []; },
+  omnisint: async d=>{ try{ const r=await fetchWithTimeout('https://sonar.omnisint.io/subdomains/'+encodeURIComponent(d)); if(r.ok) return r.json(); }catch{} try{ return await getJSON('https://sonar.omnisint.io/subdomains/'+encodeURIComponent(d)); }catch{} return []; },
   anubis: async d=>{ try{ return await getJSON('https://jldc.me/anubis/subdomains/'+encodeURIComponent(d)); }catch(e){ return []; } },
   rapiddns: async d=>{ try{ const html=await getText('https://rapiddns.io/subdomain/'+encodeURIComponent(d)+'?full=1'); return uniqHosts([html], d); }catch(e){ return []; } },
   hackertarget: async d=>{ try{ const txt=await getText('https://api.hackertarget.com/hostsearch/?q='+encodeURIComponent(d)); return uniqHosts((txt||'').split('\\n').map(l=>l.split(',')[0]), d); }catch(e){ return []; } },
@@ -435,27 +445,27 @@ async function enumerateSubdomains(domain){
   return out;
 }
 
-// ===== SSL Labs =====
+// ===== SSL Labs (improved polling) =====
 async function sslLabs(domain){
   $('#sslStatus').innerHTML='Starting SSL Labs scan…'; renderTable('#sslTable',['IP','Grade','Status'],[]);
-  let tries=0, started=false;
-  while(tries<25){
+  let tries=0, started=false, delay=4000;
+  while(tries<35){
     tries++;
     try{
       const url='https://api.ssllabs.com/api/v3/analyze?host='+encodeURIComponent(domain)+'&all=done'+(started?'&startNew=off':'&startNew=on');
       const j=await getJSON(url);
       const st=j.status||'UNKNOWN'; $('#sslStatus').innerHTML='SSL Labs: '+esc(st)+' ('+tries+')';
       if(st==='READY' && Array.isArray(j.endpoints)){ const rows=j.endpoints.map(ep=>[ep.ipAddress||'', ep.grade||'', ep.statusMessage||'']); renderTable('#sslTable',['IP','Grade','Status'],rows); $('#sslStatus').innerHTML='SSL Labs: READY'; return rows; }
-      if(st==='ERROR' || st==='DNS'){ $('#sslStatus').innerHTML='SSL Labs: '+esc(st); return []; }
-    }catch(e){}
-    started=true; await sleep(6000);
+      if(st==='ERROR' || st==='DNS'){ $('#sslStatus').innerHTML='SSL Labs: '+esc(st)+' — service unavailable or host not reachable'; return []; }
+    }catch(e){ $('#sslStatus').innerHTML='SSL Labs: polling… ('+tries+')'; }
+    started=true; await sleep(delay); delay = Math.min(15000, Math.round(delay*1.25));
   }
-  $('#sslStatus').innerHTML='SSL Labs: Timed out / no result';
+  $('#sslStatus').innerHTML='SSL Labs: no result after extended polling (likely rate-limited).';
   return [];
 }
 
-// ===== Public Emails (improved relevance) =====
-const COMMON_PORTS={25:'smtp',53:'dns',80:'http',110:'pop3',123:'ntp',143:'imap',389:'ldap',443:'https',465:'smtps',514:'syslog',587:'submission',631:'ipp',636:'ldaps',853:'dot',993:'imaps',995:'pop3s',1433:'mssql',1521:'oracle',2049:'nfs',2083:'cpanel',2087:'whm',2089:'whm',2181:'zookeeper',2375:'docker',2376:'dockers',27017:'mongodb',27018:'mongodb',3306:'mysql',3389:'rdp',4000:'webhooks',4040:'spark',4369:'epmd',5000:'flask',5432:'postgres',5601:'kibana',5672:'amqp',5900:'vnc',5985:'winrm',5986:'winrms',6379:'redis',6443:'kubeapi',7001:'weblogic',7002:'weblogic',7077:'spark',8000:'http-alt',8008:'http-alt',8080:'http-proxy',8081:'http-alt',8088:'hadoop',8443:'https-alt',8500:'consul',9000:'sentry',9200:'elasticsearch',9300:'es-internal',11211:'memcached'};
+// ===== Public Emails (improved) =====
+const COMMON_PORTS={25:'smtp',53:'dns',80:'http',110:'pop3',123:'ntp',143:'imap',389:'ldap',443:'https',465:'smtps',514:'syslog',587:'submission',631:'ipp',636:'ldaps',853:'dot',993:'imaps',995:'pop3s',1433:'mssql',1521:'oracle',2049:'nfs',2083:'cpanel',2087:'whm',2089:'whm',2181:'zookeeper',2375:'docker',2376:'dockers',27017:'mongodb',27018:'mongodb',3306:'mysql',3389:'rdp',4000:'webhooks',4040:'spark',4369:'epmd',5000:'flask',5432:'postgres',5601:'kibana',5672:'amqp',5900:'vnc',5985:'winrm',5986:'winrms',6379:'redis',6443:'kubeapi',7001:'weblogic',7002:"weblogic",7077:'spark',8000:'http-alt',8008:'http-alt',8080:'http-proxy',8081:'http-alt',8088:'hadoop',8443:'https-alt',8500:'consul',9000:'sentry',9200:'elasticsearch',9300:'es-internal',11211:'memcached'};
 
 function extractEmails(text){ const re=/\\b[A-Z0-9._%+-]+@[A-Z0-9.-]+\\.[A-Z]{2,}\\b/gi; return [...new Set((text.match(re)||[]))]; }
 function rdapEmails(r){ const out=new Set(); try{ for(const ent of (r.entities||[])){ const va=ent.vcardArray && ent.vcardArray[1] || []; for(const it of va){ if(Array.isArray(it) && it[0]==='email'){ const v=(it[3]||'').toString(); if(v) out.add(v); } } } }catch(e){} return [...out]; }
@@ -473,11 +483,9 @@ async function gatherPublicEmails(domain, txtRecords, rdapObj){
   rdapEmails(rdapObj||{}).forEach(e=>found.add(e));
   // Site pages
   for(const p of pages){ const html=await getText(base.replace(/\\/$/,'')+p); if(!html) continue; extractEmails(html).forEach(e=>found.add(e)); const mailtos=[...html.matchAll(/mailto:([^"'>\\s]+)/gi)].map(m=>m[1].split('?')[0]); mailtos.forEach(e=>found.add(e)); }
-  // GitHub code search (best-effort via mirror)
+  // GitHub & DuckDuckGo (best-effort via mirror)
   try{ const gh=await getText('https://github.com/search?q=%40'+encodeURIComponent(domain)+'&type=code'); extractEmails(gh).forEach(e=>found.add(e)); }catch{}
-  // Basic public web search page (DuckDuckGo HTML)
   try{ const ddg=await getText('https://duckduckgo.com/html/?q='+encodeURIComponent('@'+domain)); extractEmails(ddg).forEach(e=>found.add(e)); }catch{}
-  // Filter to relevant domain emails only, remove junk
   const list=[...found].filter(e=>relatedToDomain(e.toLowerCase(), domain)).sort();
   renderTable('#emails',['Email'], list.map(e=>[e]));
   return list;
@@ -524,16 +532,11 @@ function dnstwistCandidates(domain){
   const [label, ...rest]=domain.split('.'); const tld=rest.join('.');
   const kbd={'a':'qwsz','b':'vghn','c':'xdfv','d':'ersfx','e':'wsdfr','f':'rtdgc','g':'ftyhb','h':'gyujn','i':'ujko','j':'huikm','k':'jiol,','l':'kop;','m':'njk','n':'bhjm','o':'iklp','p':'ol;','q':'wa','r':'edft','s':'awedx','t':'rfgy','u':'yhji','v':'cfgb','w':'qas','x':'zsdc','y':'tugh','z':'xsa'};
   const out=new Set();
-  // omission
-  for(let i=0;i<label.length;i++) out.add(label.slice(0,i)+label.slice(i+1));
-  // transposition
-  for(let i=0;i<label.length-1;i++) out.add(label.slice(0,i)+label[i+1]+label[i]+label.slice(i+2));
-  // replacement (adjacent)
-  for(let i=0;i<label.length;i++){ const c=label[i].toLowerCase(); (kbd[c]||'').split('').forEach(r=> out.add(label.slice(0,i)+r+label.slice(i+1))); }
-  // duplication
-  for(let i=0;i<label.length;i++) out.add(label.slice(0,i)+label[i]+label[i]+label.slice(i+1));
-  // hyphenation
-  for(let i=1;i<label.length;i++) out.add(label.slice(0,i)+'-'+label.slice(i));
+  for(let i=0;i<label.length;i++) out.add(label.slice(0,i)+label.slice(i+1)); // omission
+  for(let i=0;i<label.length-1;i++) out.add(label.slice(0,i)+label[i+1]+label[i]+label.slice(i+2)); // transposition
+  for(let i=0;i<label.length;i++){ const c=label[i].toLowerCase(); (kbd[c]||'').split('').forEach(r=> out.add(label.slice(0,i)+r+label.slice(i+1))); } // replacement
+  for(let i=0;i<label.length;i++) out.add(label.slice(0,i)+label[i]+label[i]+label.slice(i+1)); // duplication
+  for(let i=1;i<label.length;i++) out.add(label.slice(0,i)+'-'+label.slice(i)); // hyphenation
   return [...out].filter(s=>s && s!==label).map(s=>s+'.'+tld);
 }
 const takeoverHints=[/\\.github\\.io$/i,/\\.herokuapp\\.com$/i,/\\.azurewebsites\\.net$/i,/\\.cloudfront\\.net$/i,/\\.amazonaws\\.com$/i,/\\.netlify\\.app$/i,/\\.readthedocs\\.io$/i,/\\.fastly\\.net$/i,/\\.pages\\.dev$/i];
@@ -556,22 +559,21 @@ async function typosAndTakeover(domain){
   return rows;
 }
 
-
-// ===== Wayback & Favicon hash (complete) =====
+// ===== Wayback & Favicon hash =====
 async function wayback(domain){
   try{
     const url = `https://web.archive.org/cdx/search/cdx?url=${encodeURIComponent(domain)}/*&output=json&fl=timestamp&filter=statuscode:200&limit=5000`;
     const txt = await getText(url);
     let total = 0, first='', last='';
-    if (txt) {
-      try {
+    if(txt){
+      try{
         const arr = JSON.parse(txt);
-        if (Array.isArray(arr) && arr.length > 1) {
-          total = arr.length - 1;
+        if (Array.isArray(arr) && arr.length>1){
+          total = arr.length-1;
           first = arr[1]?.[0] || '';
-          last  = arr[arr.length - 1]?.[0] || '';
+          last  = arr[arr.length-1]?.[0] || '';
         }
-      } catch {}
+      }catch{}
     }
     const rows = [
       ['Snapshots', String(total)],
@@ -586,21 +588,38 @@ async function wayback(domain){
   }
 }
 
-// Simple SHA-256 favicon hash (note: Shodan uses mmh3; this is a placeholder)
+// mmh3 hash of base64 favicon (Shodan-style)
+function mmh3(data){
+  let h = 0x9747b28c|0;
+  for (let i=0;i<data.length;i++){
+    let k = data.charCodeAt(i);
+    k = Math.imul(k, 0xcc9e2d51);
+    k = (k << 15) | (k >>> 17);
+    k = Math.imul(k, 0x1b873593);
+    h ^= k;
+    h = (h << 13) | (h >>> 19);
+    h = Math.imul(h, 5) + 0xe6546b64;
+  }
+  h ^= data.length;
+  h ^= h >>> 16;
+  h = Math.imul(h, 0x85ebca6b);
+  h ^= h >>> 13;
+  h = Math.imul(h, 0xc2b2ae35);
+  h ^= h >>> 16;
+  return (h>>>0).toString();
+}
 async function faviconHash(domain){
   try{
     const url = `https://${domain}/favicon.ico`;
-    const res = await fetch(url, {mode:'no-cors'});
-    // If blocked, fall back to proxy
-    const buf = res && res.ok ? await res.arrayBuffer() :
-      await (await fetch('https://r.jina.ai/http/' + url.replace(/^https?:\\/\\//,''))).arrayBuffer();
-    const digest = await crypto.subtle.digest('SHA-256', buf);
-    const hex = [...new Uint8Array(digest)].map(b=>b.toString(16).padStart(2,'0')).join('');
-    renderTable('#favhash', ['Type','Value'], [['SHA-256', hex], ['URL', url]]);
-    return {algo:'sha256', hash:hex, url};
+    const b64 = await getText('https://r.jina.ai/http/' + url.replace(/^https?:\\/\\/,''));
+    let base64 = '';
+    if (/^[A-Za-z0-9+/=]+$/.test((b64||'').trim())) base64 = b64.trim();
+    let mm = base64 ? mmh3(base64) : '';
+    renderTable('#favhash', ['Type','Value'], [['mmh3 (Shodan)', mm||'n/a'], ['URL', url]]);
+    return {algo:'mmh3-base64', hash:mm, url};
   }catch(e){
     renderTable('#favhash', ['Type','Value'], [['Error','Could not fetch favicon']]);
-    return {algo:'sha256', hash:'', url:''};
+    return {algo:'mmh3-base64', hash:'', url:''};
   }
 }
 
@@ -630,12 +649,11 @@ function renderSummary({spf, dmarc, ssl, subsCount, portsCount, privacy}){
   parts.push(badge(portsCount>0 ? (portsCount>10?'bad':'warn') : 'good', `${portsCount} open ports`));
   parts.push(badge(subsCount>50 ? 'warn' : 'good', `${subsCount} subdomains`));
   parts.push(badge(privacy ? 'good' : 'warn', privacy ? 'WHOIS privacy' : 'WHOIS exposed'));
-  const s=document.getElementById('summary'); if(s) s.innerHTML = parts.join(' ');
+  $('#summary').innerHTML = parts.join(' ');
 }
 
 // ===== Orchestrator =====
 async function run(domain, brand){
-  console.log('Run called for', domain, brand);
   setBusy(true); setProgress('Starting…');
   const results = {domain, brand, when: new Date().toISOString()};
   try{
@@ -701,43 +719,31 @@ async function run(domain, brand){
 }
 
 // ===== UI wiring =====
-document.addEventListener('DOMContentLoaded', () => {
-  console.log('OSINT dashboard ready');
-  const form=document.getElementById('f');
-  if(form){
-    form.addEventListener('submit', async (e)=>{
-      e.preventDefault();
-      const domain = (document.getElementById('domain').value||'').trim().toLowerCase();
-      const brand  = (document.getElementById('brand').value||'').trim().toLowerCase();
-      if(!domain){ alert('Enter a domain'); return; }
-      await run(domain, brand || domain.split('.')[0]);
-    });
-  }
-  const demo=document.getElementById('demo');
-  if(demo){
-    demo.addEventListener('click', async ()=>{
-      document.getElementById('domain').value = 'example.com';
-      document.getElementById('brand').value = 'example';
-      // Auto-run demo so you can see progress right away
-      await run('example.com','example');
-    });
-  }
-  document.getElementById('dljson')?.addEventListener('click', ()=>{
-    if(!Object.keys(LAST||{}).length){ alert('No results yet. Run a scan first.'); return; }
-    downloadJSON(LAST, `osint_${(LAST.domain||'domain').replace(/[^a-z0-9.-]/gi,'_')}.json`);
-  });
-  document.getElementById('dlcsv')?.addEventListener('click', ()=>{
-    const table = document.getElementById('tld');
-    const headers = [...table.querySelectorAll('thead th')].map(th=>th.textContent.trim());
-    const rows = [...table.querySelectorAll('tbody tr')].map(tr=>[...tr.children].map(td=>td.textContent.trim()));
-    if(!rows.length){ alert('No TLD sweep data yet.'); return; }
-    downloadCSV(rows, headers, 'tld_sweep.csv');
-  });
+$('#f').addEventListener('submit', async (e)=>{
+  e.preventDefault();
+  const domain = ($('#domain').value||'').trim().toLowerCase();
+  const brand  = ($('#brand').value||'').trim().toLowerCase();
+  if(!domain){ alert('Enter a domain'); return; }
+  await run(domain, brand || domain.split('.')[0]);
+});
+
+$('#demo').addEventListener('click', ()=>{
+  $('#domain').value = 'example.com';
+  $('#brand').value = 'example';
+});
+
+$('#dljson').addEventListener('click', ()=>{
+  if(!Object.keys(LAST||{}).length){ alert('No results yet. Run a scan first.'); return; }
+  downloadJSON(LAST, `osint_${(LAST.domain||'domain').replace(/[^a-z0-9.-]/gi,'_')}.json`);
+});
+
+$('#dlcsv').addEventListener('click', ()=>{
+  const table = $('#tld');
+  const headers = [...table.querySelectorAll('thead th')].map(th=>th.textContent.trim());
+  const rows = [...table.querySelectorAll('tbody tr')].map(tr=>[...tr.children].map(td=>td.textContent.trim()));
+  if(!rows.length){ alert('No TLD sweep data yet.'); return; }
+  downloadCSV(rows, headers, 'tld_sweep.csv');
 });
 </script>
 </body>
 </html>
-"""
-
-Path("/mnt/data/index.html").write_text(html, encoding="utf-8")
-print("Wrote /mnt/data/index.html")
