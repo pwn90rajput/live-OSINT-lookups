@@ -1,127 +1,132 @@
 <!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>OSINT Monitor — Extended Version</title>
+  <style>
+    body{background:#0b1020;color:#e7ecff;font:15px/1.55 system-ui}
+    .card{background:#0f1a34;border-radius:14px;padding:14px;margin:12px 0}
+    h2{margin:12px 0 10px}
+    table{width:100%;border-collapse:collapse}
+    th,td{padding:9px;border-bottom:1px solid #22325a;vertical-align:top}
+    th{background:#0f1a34;position:sticky;top:0}
+    tr:hover{background:#101f45}
+    .muted{color:#a9b4d6;font-size:13px}
+    .spinner{width:16px;height:16px;border:2px solid #2a3a6a;border-top-color:#7aa2ff;border-radius:50%;animation:spin .8s linear infinite;display:inline-block}
+    @keyframes spin{to{transform:rotate(360deg)}}
+  </style>
+</head>
+<body>
+  <div class="card">
+    <h2>Domain Scan</h2>
+    <form id="f" autocomplete="off">
+      <input id="domain" type="text" placeholder="example.com" />
+      <button type="submit" id="scanBtn">Scan</button>
+    </form>
+    <div id="progress" class="muted"></div>
+  </div>
+
+  <section class="card">
+    <h2>SSL Labs (Grade)</h2>
+    <div id="sslStatus" class="muted"></div>
+    <table id="sslTable"><thead></thead><tbody></tbody></table>
+  </section>
+
+  <section class="card">
+    <h2>Public Emails (discovered)</h2>
+    <table id="emails"><thead></thead><tbody></tbody></table>
+  </section>
+
+  <section class="card">
+    <h2>Open Ports (Nmap-like)</h2>
+    <table id="openports"><thead></thead><tbody></tbody></table>
+  </section>
+
+<script>
+const $=(s)=>document.querySelector(s);
+const sleep=(ms)=>new Promise(r=>setTimeout(r,ms));
+function renderTable(sel, headers, rows){
+  const table=$(sel), thead=table.querySelector('thead'), tbody=table.querySelector('tbody');
+  thead.innerHTML='<tr>'+headers.map(h=>'<th>'+h+'</th>').join('')+'</tr>';
+  tbody.innerHTML= rows.length? rows.map(r=>'<tr>'+r.map(c=>'<td>'+c+'</td>').join('')+'</tr>').join('')
+                                : '<tr><td colspan="'+headers.length+'" class="muted">No data</td></tr>';
+}
+function setProgress(txt){ $('#progress').innerHTML = txt? '<span class="spinner"></span> '+txt : ''; }
+async function getJSON(url){
+  const r=await fetch(url,{headers:{'accept':'application/json'}});
+  if(r.ok) return r.json(); throw new Error('fetch failed');
+}
+
+// ===== SSL Labs =====
 async function sslLabs(domain){
-$('#sslStatus').innerHTML='Starting SSL Labs scan…'; renderTable('#sslTable',['IP','Grade','Status'],[]);
-let tries=0, started=false;
-while(tries<25){
-tries++;
-try{
-const url='https://api.ssllabs.com/api/v3/analyze?host='+encodeURIComponent(domain)+'&all=done'+(started?'&startNew=off':'&startNew=on');
-const j=await getJSON(url);
-const st=j.status||'UNKNOWN'; $('#sslStatus').innerHTML='SSL Labs: '+esc(st)+' ('+tries+')';
-if(st==='READY' && Array.isArray(j.endpoints)){ const rows=j.endpoints.map(ep=>[ep.ipAddress||'', ep.grade||'', ep.statusMessage||'']); renderTable('#sslTable',['IP','Grade','Status'],rows); $('#sslStatus').innerHTML='SSL Labs: READY'; return rows; }
-if(st==='ERROR' || st==='DNS'){ $('#sslStatus').innerHTML='SSL Labs: '+esc(st); return []; }
-}catch(e){}
-started=true; await sleep(6000);
-}
-$('#sslStatus').innerHTML='SSL Labs: Timed out / no result';
-return [];
-}
-
-
-// ===== Public Emails (improved relevance) =====
-const COMMON_PORTS={25:'smtp',53:'dns',80:'http',110:'pop3',123:'ntp',143:'imap',389:'ldap',443:'https',465:'smtps',514:'syslog',587:'submission',631:'ipp',636:'ldaps',853:'dot',993:'imaps',995:'pop3s',1433:'mssql',1521:'oracle',2049:'nfs',2083:'cpanel',2087:'whm',2089:'whm',2181:'zookeeper',2375:'docker',2376:'dockers',27017:'mongodb',27018:'mongodb',3306:'mysql',3389:'rdp',4000:'webhooks',4040:'spark',4369:'epmd',5000:'flask',5432:'postgres',5601:'kibana',5672:'amqp',5900:'vnc',5985:'winrm',5986:'winrms',6379:'redis',6443:'kubeapi',7001:'weblogic',7002:'weblogic',7077:'spark',8000:'http-alt',8008:'http-alt',8080:'http-proxy',8081:'http-alt',8088:'hadoop',8443:'https-alt',8500:'consul',9000:'sentry',9200:'elasticsearch',9300:'es-internal',11211:'memcached'};
-
-
-function extractEmails(text){ const re=/\b[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}\b/gi; return [...new Set((text.match(re)||[]))]; }
-function rdapEmails(r){ const out=new Set(); try{ for(const ent of (r.entities||[])){ const va=ent.vcardArray && ent.vcardArray[1] || []; for(const it of va){ if(Array.isArray(it) && it[0]==='email'){ const v=(it[3]||'').toString(); if(v) out.add(v); } } } }catch(e){} return [...out]; }
-function relatedToDomain(email, domain){ if(!email) return false; const parts=email.split('@'); if(parts.length!==2) return false; const host=parts[1].toLowerCase(); return host===domain || host.endsWith('.'+domain); }
-async function gatherPublicEmails(domain, txtRecords, rdapObj){
-setProgress('Gathering public emails…');
-const base='https://'+domain;
-const pages=['/','.well-known/security.txt','/security.txt','/contact','/contact-us','/contacts','/about','/team','/careers','/support','/help','/legal','/privacy','/terms','/impressum','/robots.txt','/sitemap.xml'];
-const found=new Set();
-// DMARC rua/ruf
-for(const t of (txtRecords||[])){ const m=t.match(/ru[af]=mailto:([^,\s]+)/gi); if(m){ m.forEach(s=>found.add(s.split(':').pop())); } }
-// SOA RNAME
-try{ const soa=await doh(domain,'SOA'); if(soa&&soa[0]){ const parts=soa[0].split(' '); if(parts[1]){ const rname=parts[1].replace(/\.$/,'').replace(/\./g,'@'); if(/@/.test(rname)) found.add(rname); } } }catch{}
-// RDAP entity emails
-rdapEmails(rdapObj||{}).forEach(e=>found.add(e));
-// Site pages
-for(const p of pages){ const html=await getText(base.replace(/\/$/,'')+p); if(!html) continue; extractEmails(html).forEach(e=>found.add(e)); const mailtos=[...html.matchAll(/mailto:([^"'>\s]+)/gi)].map(m=>m[1].split('?')[0]); mailtos.forEach(e=>found.add(e)); }
-// GitHub code search (best-effort via mirror)
-try{ const gh=await getText('https://github.com/search?q=%40'+encodeURIComponent(domain)+'&type=code'); extractEmails(gh).forEach(e=>found.add(e)); }catch{}
-// Basic public web search page (DuckDuckGo HTML)
-try{ const ddg=await getText('https://duckduckgo.com/html/?q='+encodeURIComponent('@'+domain)); extractEmails(ddg).forEach(e=>found.add(e)); }catch{}
-// Filter to relevant domain emails only, remove junk
-const list=[...found].filter(e=>relatedToDomain(e.toLowerCase(), domain)).sort();
-renderTable('#emails',['Email'], list.map(e=>[e]));
-return list;
-}
-
-
-// ===== Branding & Socials =====
-async function fetchBranding(domain){
-setProgress('Discovering branding…');
-const base='https://'+domain; const html=await getText(base);
-const out=[]; const logos=$('#logos'); if(logos) logos.innerHTML='';
-if(html){
-const iconTags=[...html.matchAll(/<link[^>]+rel=["'](?:icon|shortcut icon|apple-touch-icon)["'][^>]*>/gi)].map(m=>m[0]);
-const iconHrefs=iconTags.map(tag=> (tag.match(/href=["']([^"']+)/i)||[])[1]).filter(Boolean)
-.map(h=>{ try{ return new URL(h,base).href; }catch(e){ return h; } });
-const og=(html.match(/property=["']og:image["'][^>]*content=["']([^"']+)/i)||[])[1];
-if(og){ try{ iconHrefs.push(new URL(og,base).href); }catch(e){ iconHrefs.push(og); } }
-const imgs=[...new Set(iconHrefs)];
-imgs.forEach(src=>{ const img=new Image(); img.src=src; img.alt='logo'; logos?.appendChild(img); out.push(['Icon',src]); });
-}
-const cb='https://logo.clearbit.com/'+domain; out.push(['Clearbit',cb]); const cbimg=new Image(); cbimg.src=cb; cbimg.alt='clearbit'; $('#logos')?.appendChild(cbimg);
-const tb=$('#branding'); tb.querySelector('thead').innerHTML='<tr><th>Source</th><th>URL</th></tr>';
-tb.querySelector('tbody').innerHTML= out.map(([k,u])=>'<tr><td>'+esc(k)+'</td><td><a target="_blank" rel="noreferrer" href="'+esc(u)+'">'+esc(u)+'</a></td></tr>').join('');
-return out;
-}
-async function findSocials(domain){
-setProgress('Finding social profiles…');
-const base='https://'+domain; const html=await getText(base); const rows=[]; if(!html){ renderTable('#social',["Network","URL"],[]); return []; }
-function grab(re){ return [...new Set((html.match(re)||[]))]; }
-const links=[ ...grab(/https?:\/\/([a-z]+\.)?linkedin\.com\/[A-Za-z0-9_\-\/]+/gi),
-...grab(/https?:\/\/twitter\.com\/[A-Za-z0-9_]+/gi),
-...grab(/https?:\/\/x\.com\/[A-Za-z0-9_]+/gi),
-...grab(/https?:\/\/facebook\.com\/[A-Za-z0-9_.\-\/]+/gi),
-...grab(/https?:\/\/www\.youtube\.com\/[A-Za-z0-9_.\-\/]+/gi),
-...grab(/https?:\/\/instagram\.com\/[A-Za-z0-9_.\-\/]+/gi)];
-const uniq=[...new Set(links)];
-uniq.forEach(u=>{ let n='Other'; if(/linkedin/i.test(u)) n='LinkedIn'; else if(/twitter|x\.com/i.test(u)) n='Twitter/X';
-else if(/facebook/i.test(u)) n='Facebook'; else if(/youtube/i.test(u)) n='YouTube'; else if(/instagram/i.test(u)) n='Instagram'; rows.push([n,u]); });
-renderTable('#social',['Network','URL'], rows);
-return rows;
-}
-
-
-// ===== Typosquats (light dnstwist) & takeover hints =====
-const takeoverHints=[/\.github\.io$/i,/\.herokuapp\.com$/i,/\.azurewebsites\.net$/i,/\.cloudfront\.net$/i,/\.amazonaws\.com$/i,/\.netlify\.app$/i,/\.readthedocs\.io$/i,/\.fastly\.net$/i,/\.pages\.dev$/i];
-
-async function typosAndTakeover(domain){
-  setProgress('Generating typo domains…');
-  const candidates=dnstwistCandidates(domain).slice(0,200);
-  const rows=[]; let i=0; const workers=8;
-  async function w(){
-    while(i<candidates.length){
-      const idx=i++; const d=candidates[idx]; let A=[], C=[];
-      try{ A=await doh(d,'A'); }catch{} try{ C=await doh(d,'CNAME'); }catch{}
-      const cname=(C||[])[0]||''; 
-      const provider = takeoverHints.find(re=>re.test((cname||'').toLowerCase())) ? '3rd-party CNAME' : '';
-      if((A&&A.length) || cname){ rows.push([d,(A||[])[0]||'', cname, provider]); }
-      setProgress(`Typosquats checked ${idx+1}/${candidates.length}`);
-    }
+  $('#sslStatus').innerHTML='Starting SSL Labs scan…'; 
+  renderTable('#sslTable',['IP','Grade','Status'],[]);
+  let tries=0, started=false;
+  while(tries<25){
+    tries++;
+    try{
+      const url='https://api.ssllabs.com/api/v3/analyze?host='+encodeURIComponent(domain)+'&all=done'+(started?'&startNew=off':'&startNew=on');
+      const j=await getJSON(url);
+      const st=j.status||'UNKNOWN'; $('#sslStatus').innerHTML='SSL Labs: '+st+' ('+tries+')';
+      if(st==='READY' && Array.isArray(j.endpoints)){
+        const rows=j.endpoints.map(ep=>[ep.ipAddress||'', ep.grade||'', ep.statusMessage||'']);
+        renderTable('#sslTable',['IP','Grade','Status'],rows); 
+        $('#sslStatus').innerHTML='SSL Labs: READY'; 
+        return rows;
+      }
+      if(st==='ERROR' || st==='DNS'){ $('#sslStatus').innerHTML='SSL Labs: '+st; return []; }
+    }catch(e){}
+    started=true; await sleep(6000);
   }
-  await Promise.all(Array.from({length:workers}, w));
-  rows.sort((a,b)=>a[0].localeCompare(b[0]));
-  renderTable('#typos',['Domain','First A','CNAME','Hint'], rows);
-  return rows;
+  $('#sslStatus').innerHTML='SSL Labs: Timed out / no result';
+  return [];
 }
 
-// ===== Nmap-like Open Ports Section (via Shodan InternetDB) =====
+// ===== Public Emails (simple improved relevance) =====
+function extractEmails(text){ const re=/[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/gi; return [...new Set((text.match(re)||[]))]; }
+async function gatherPublicEmails(domain){
+  setProgress('Gathering public emails…');
+  const base='https://'+domain;
+  const pages=['/','.well-known/security.txt','/contact','/about','/team','/support'];
+  const found=new Set();
+  for(const p of pages){ 
+    try{ const r=await fetch(base+p); if(r.ok){ const t=await r.text(); extractEmails(t).forEach(e=>found.add(e)); } }catch{}
+  }
+  const list=[...found].filter(e=>e.endsWith(domain)).sort();
+  renderTable('#emails',['Email'], list.map(e=>[e]));
+  return list;
+}
+
+// ===== Nmap-like Open Ports (Shodan InternetDB) =====
+const COMMON_PORTS={80:'http',443:'https',22:'ssh',25:'smtp',53:'dns',3306:'mysql',3389:'rdp'};
 async function openPorts(domain){
-  setProgress('Fetching open ports (Shodan InternetDB)…');
-  let A=[]; try{ A=await doh(domain,'A'); }catch{}
-  const ip = (A||[])[0];
-  if(!ip){ renderTable('#openports',['Port','Service'],[]); return []; }
+  setProgress('Fetching open ports…');
   try{
-    const data=await getJSON('https://internetdb.shodan.io/'+encodeURIComponent(ip));
-    const ports=(data.ports||[]).map(p=>[String(p), COMMON_PORTS[p]||'unknown']);
-    renderTable('#openports',['Port','Service'], ports);
+    const ipRes=await fetch('https://dns.google/resolve?name='+domain+'&type=A');
+    const ipJson=await ipRes.json(); const ip=ipJson.Answer? ipJson.Answer[0].data : null;
+    if(!ip){ renderTable('#openports',['Port','Service'],[]); return []; }
+    const data=await getJSON('https://internetdb.shodan.io/'+ip);
+    const ports=(data.ports||[]).map(p=>[p, COMMON_PORTS[p]||'unknown']);
+    renderTable('#openports',['Port','Service'],ports);
     return ports;
-  }catch(e){
-    renderTable('#openports',['Port','Service'],[]);
-    return [];
-  }
+  }catch(e){ renderTable('#openports',['Port','Service'],[]); return []; }
 }
+
+// ===== Orchestrator =====
+async function runScan(domain){
+  setProgress('Scanning '+domain+'…');
+  await sslLabs(domain);
+  await gatherPublicEmails(domain);
+  await openPorts(domain);
+  setProgress('Done.');
+}
+$('#f').addEventListener('submit', async (e)=>{
+  e.preventDefault();
+  const d=($('#domain').value||'').trim().toLowerCase();
+  if(!d) return;
+  await runScan(d);
+});
+</script>
+</body>
+</html>
