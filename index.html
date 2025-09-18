@@ -171,6 +171,7 @@
 <script>
 // ===== Utilities =====
 console.log('OSINT dashboard loaded');
+document.addEventListener('DOMContentLoaded', ()=>{ try{ const sum=document.getElementById('summary'); if(sum){ sum.innerHTML='<span class="badge good">UI loaded</span>'; } }catch(e){} });
 function showError(e){
   try{
     const box = document.getElementById('errorBanner');
