@@ -1,21 +1,363 @@
-<!doctype html>
-<html>
-  <head>
-    <meta charset="utf-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>OSINT Monitor — Full Dashboard</title>
-    <script src="https://cdn.tailwindcss.com"></script>
-    <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
-    <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
-    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
-  </head>
-  <body class="bg-gray-50">
-    <div id="root"></div>
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>OSINT Recon Dashboard</title>
+  <!-- Tailwind CSS CDN -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <style>
+    :root { color-scheme: dark; }
+    body { background: #0b0f10; font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace; }
+    .neon { text-shadow: 0 0 10px rgba(0,255,170,.3), 0 0 25px rgba(0,255,170,.15); }
+    .panel { background: #0f1619; border: 1px solid #17343b; box-shadow: inset 0 0 0 1px #0b2a2e; }
+    .divider { height:1px; background:linear-gradient(90deg, transparent, #1b3f46, transparent); }
+    .spinner { width: 18px; height: 18px; border: 3px solid #16343a; border-top-color: #29f7c4; border-radius: 50%; animation: spin 1s linear infinite; }
+    @keyframes spin { to { transform: rotate(360deg); } }
+    .badge { background:#0d2326; border:1px solid #1f4b53; padding:.15rem .45rem; border-radius:.35rem; }
+    a.link { color:#7dece0; }
+    a.link:hover { text-decoration: underline; }
+    code.k { background:#0b1216; border:1px solid #234; border-bottom-width:3px; border-right-width:3px; padding:.1rem .35rem; border-radius:.35rem; }
+  </style>
+</head>
+<body class="text-slate-200">
+  <header class="px-4 py-5 md:px-8 sticky top-0 z-10 backdrop-blur bg-black/40 border-b border-teal-900/40">
+    <div class="flex items-center justify-between gap-4">
+      <h1 class="text-xl md:text-2xl font-semibold text-teal-300 neon">OSINT Recon Dashboard</h1>
+      <div class="text-xs md:text-sm text-teal-400">Passive lookups for authorized testing</div>
+    </div>
+  </header>
 
-    <script type="text/babel">
-      // Simplified inclusion of your React component
-      ${fetch('https://raw.githubusercontent.com/your-username/osint-monitor/main/osint-monitor.jsx')
-          .then(r=>r.text()).then(code=>eval(Babel.transform(code, { presets: ['react'] }).code))}
-    </script>
-  </body>
+  <main class="p-4 md:p-8 space-y-6">
+    <!-- Target Input -->
+    <section class="panel rounded-2xl p-4 md:p-6">
+      <div class="flex flex-col md:flex-row md:items-end gap-4">
+        <div class="grow">
+          <label class="block text-sm text-slate-400 mb-1">Target (Domain or IP)</label>
+          <input id="target" type="text" placeholder="example.com or 8.8.8.8" class="w-full rounded-xl bg-black/40 border border-teal-900/50 px-4 py-2 focus:outline-none focus:ring-2 focus:ring-teal-500/60" />
+        </div>
+        <div class="flex gap-2">
+          <button id="scanBtn" class="rounded-xl px-4 py-2 bg-teal-500/20 hover:bg-teal-500/30 border border-teal-600/50">Run Recon</button>
+          <button id="resetBtn" class="rounded-xl px-4 py-2 bg-slate-700/40 hover:bg-slate-700/60 border border-slate-600/60">Clear</button>
+        </div>
+      </div>
+      <div class="mt-3 text-xs text-slate-400">Press <code class="k">Enter</code> to run. Works entirely in-browser on GitHub Pages (HTTPS).</div>
+    </section>
+
+    <!-- Results Grid -->
+    <section class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4">
+      <!-- Host & DNS -->
+      <div class="panel rounded-2xl p-4">
+        <div class="flex items-center justify-between mb-2">
+          <h3 class="text-teal-300">Host & DNS</h3>
+          <div id="hostLoader" class="hidden spinner"></div>
+        </div>
+        <div id="hostInfo" class="text-sm space-y-2 text-slate-300"></div>
+      </div>
+
+      <!-- Hosting / ASN -->
+      <div class="panel rounded-2xl p-4">
+        <div class="flex items-center justify-between mb-2">
+          <h3 class="text-teal-300">Hosting / ASN</h3>
+          <div id="asnLoader" class="hidden spinner"></div>
+        </div>
+        <div id="asnInfo" class="text-sm space-y-2 text-slate-300"></div>
+      </div>
+
+      <!-- SSL/TLS -->
+      <div class="panel rounded-2xl p-4">
+        <div class="flex items-center justify-between mb-2">
+          <h3 class="text-teal-300">SSL/TLS</h3>
+          <div id="sslLoader" class="hidden spinner"></div>
+        </div>
+        <div class="text-xs text-slate-400 mb-2">Uses SSL Labs API; queues new analyses and polls until ready.</div>
+        <div id="sslInfo" class="text-sm space-y-2 text-slate-300"></div>
+      </div>
+
+      <!-- Open Ports -->
+      <div class="panel rounded-2xl p-4">
+        <div class="flex items-center justify-between mb-2">
+          <h3 class="text-teal-300">Open Ports (Passive)</h3>
+          <div id="portsLoader" class="hidden spinner"></div>
+        </div>
+        <div id="portsInfo" class="text-sm space-y-2 text-slate-300"></div>
+        <div class="text-[11px] text-slate-500 mt-2">Data from Shodan InternetDB (no key). Shows last-seen ports; not an active scan.</div>
+      </div>
+
+      <!-- WHOIS / RDAP -->
+      <div class="panel rounded-2xl p-4 md:col-span-2 xl:col-span-2">
+        <div class="flex items-center justify-between mb-2">
+          <h3 class="text-teal-300">WHOIS / RDAP</h3>
+          <div id="whoisLoader" class="hidden spinner"></div>
+        </div>
+        <div id="whoisInfo" class="text-sm space-y-2 text-slate-300"></div>
+      </div>
+    </section>
+
+    <section class="text-xs text-slate-500 leading-relaxed">
+      <p><strong>Legal:</strong> For assets you own or are explicitly authorized to test. This dashboard performs passive/API lookups over HTTPS; it does not actively scan targets.</p>
+      <p>APIs used: DNS over HTTPS (Google), IP Intel (ipwho.is), SSL Labs, RDAP (rdap.org), Shodan InternetDB.</p>
+    </section>
+  </main>
+
+  <script>
+    // --------------------- Utilities ---------------------
+    const els = {
+      target: document.getElementById('target'),
+      scanBtn: document.getElementById('scanBtn'),
+      resetBtn: document.getElementById('resetBtn'),
+      hostLoader: document.getElementById('hostLoader'),
+      asnLoader: document.getElementById('asnLoader'),
+      sslLoader: document.getElementById('sslLoader'),
+      portsLoader: document.getElementById('portsLoader'),
+      whoisLoader: document.getElementById('whoisLoader'),
+      hostInfo: document.getElementById('hostInfo'),
+      asnInfo: document.getElementById('asnInfo'),
+      sslInfo: document.getElementById('sslInfo'),
+      portsInfo: document.getElementById('portsInfo'),
+      whoisInfo: document.getElementById('whoisInfo'),
+    };
+
+    const sleep = (ms) => new Promise(r => setTimeout(r, ms));
+    const isIP = (v) => /^(\d{1,3}\.){3}\d{1,3}$/.test(v) || /:/.test(v);
+    const strip = (s='') => s.trim().replace(/^https?:\/\//i, '').replace(/\/$/, '');
+
+    function setLoading(loader, on) { loader.classList.toggle('hidden', !on); }
+    function clearPanels(){ els.hostInfo.innerHTML = els.asnInfo.innerHTML = els.sslInfo.innerHTML = els.portsInfo.innerHTML = els.whoisInfo.innerHTML = ''; }
+    function li(k, v) { return `<div><span class="text-slate-400">${k}:</span> <span class="text-slate-200">${v ?? '-'}</span></div>`; }
+    function pre(obj) { return `<pre class="text-xs bg-black/30 border border-slate-700/40 rounded p-2 overflow-x-auto">${escapeHtml(JSON.stringify(obj, null, 2))}<\/pre>`; }
+    function escapeHtml(s){ return s.replace(/[&<>\"]/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;"}[c])); }
+
+    // --------------------- DNS Resolve (Google DoH) ---------------------
+    async function resolveA(host) {
+      const url = `https://dns.google/resolve?name=${encodeURIComponent(host)}&type=A`;
+      const r = await fetch(url, { cache: 'no-store' });
+      if (!r.ok) throw new Error('DNS resolve failed');
+      const j = await r.json();
+      const answers = (j.Answer || []).filter(a => a.type === 1);
+      return answers.map(a => a.data);
+    }
+
+    // --------------------- Hosting/ASN (ipwho.is) ---------------------
+    async function getIpIntel(ip) {
+      const r = await fetch(`https://ipwho.is/${encodeURIComponent(ip)}`);
+      if (!r.ok) throw new Error('ipwho.is failed');
+      const j = await r.json();
+      if (j.success === false) throw new Error(j.message || 'ipwho.is error');
+      return j;
+    }
+
+    // --------------------- Ports (Shodan InternetDB) ---------------------
+    async function getOpenPorts(ip) {
+      const r = await fetch(`https://internetdb.shodan.io/${encodeURIComponent(ip)}`);
+      if (!r.ok) throw new Error('InternetDB failed');
+      return await r.json();
+    }
+
+    // --------------------- WHOIS / RDAP ---------------------
+    async function getRdapDomain(domain) {
+      const r = await fetch(`https://rdap.org/domain/${encodeURIComponent(domain)}`);
+      if (!r.ok) throw new Error('RDAP domain failed');
+      return await r.json();
+    }
+    async function getRdapIP(ip) {
+      const r = await fetch(`https://rdap.org/ip/${encodeURIComponent(ip)}`);
+      if (!r.ok) throw new Error('RDAP ip failed');
+      return await r.json();
+    }
+
+    // --------------------- SSL Labs ---------------------
+    async function getSslAnalysis(host) {
+      // Start or fetch existing analysis
+      let endpoint = `https://api.ssllabs.com/api/v3/analyze?host=${encodeURIComponent(host)}&all=done&fromCache=on`;
+      let r = await fetch(endpoint);
+      if (!r.ok) throw new Error('SSL Labs analyze failed');
+      let j = await r.json();
+
+      // If not ready, queue new and poll
+      if (!j.status || (j.status !== 'READY' && j.status !== 'ERROR')) {
+        // queue a new assessment
+        await fetch(`https://api.ssllabs.com/api/v3/analyze?host=${encodeURIComponent(host)}&publish=off&all=done&startNew=on`);
+        for (let i = 0; i < 20; i++) { // up to ~100s
+          await sleep(5000);
+          r = await fetch(`https://api.ssllabs.com/api/v3/analyze?host=${encodeURIComponent(host)}&all=done`);
+          if (!r.ok) break;
+          j = await r.json();
+          if (j.status === 'READY' || j.status === 'ERROR') break;
+        }
+      }
+      return j;
+    }
+
+    // --------------------- Renderers ---------------------
+    function renderHost(host, ips) {
+      els.hostInfo.innerHTML = [
+        li('Host', host),
+        li('Resolved A', ips && ips.length ? ips.join(', ') : '—'),
+      ].join('');
+    }
+
+    function renderASN(j) {
+      const parts = [];
+      parts.push(li('IP', j.ip));
+      parts.push(li('Org/ASN', `${j.connection?.org || '-'} / AS${j.connection?.asn || '-'}`));
+      parts.push(li('Country/City', `${j.country || '-'} / ${j.city || '-'}`));
+      parts.push(li('ISP', j.connection?.isp || '-'));
+      parts.push(li('Latitude/Longitude', `${j.latitude ?? '-'}, ${j.longitude ?? '-'}`));
+      els.asnInfo.innerHTML = parts.join('');
+    }
+
+    function renderPorts(j) {
+      if (!j || (!j.ports && !j.data && !j.services)) {
+        els.portsInfo.innerHTML = 'No recent port data available.';
+        return;
+      }
+      const ports = j.ports || [];
+      const vulns = j.vulns ? Object.keys(j.vulns) : [];
+      let html = '';
+      html += li('Open Ports', ports.length ? ports.join(', ') : '—');
+      if (j.cpes && Object.keys(j.cpes).length) {
+        const rows = Object.entries(j.cpes).map(([port, arr]) => `<tr><td class="px-2 py-1 border border-slate-700/50">${port}</td><td class="px-2 py-1 border border-slate-700/50">${arr.join('<br/>')}</td></tr>`).join('');
+        html += `<div class="mt-2"><div class="text-slate-400 mb-1">CPEs (services/versions)</div><table class="w-full text-xs border border-slate-700/50">${rows}</table></div>`;
+      }
+      if (vulns.length) {
+        html += `<div class="mt-2 text-xs"><span class="text-slate-400">Vulns:</span> ${vulns.join(', ')}</div>`;
+      }
+      els.portsInfo.innerHTML = html;
+    }
+
+    function renderWHOIS(j) {
+      if (!j) { els.whoisInfo.innerHTML = 'No RDAP data.'; return; }
+      const h = [];
+      if (j.ldhName) h.push(li('Domain', j.ldhName));
+      if (j.startAddress || j.handle) h.push(li('Handle/Start', `${j.handle || '-'} / ${j.startAddress || '-'}`));
+      if (j.name) h.push(li('Name', j.name));
+      if (Array.isArray(j.status)) h.push(li('Status', j.status.join(', ')));
+      if (j.events) {
+        const created = j.events.find(e=>e.eventAction==='registration')?.eventDate;
+        const expires = j.events.find(e=>e.eventAction==='expiration')?.eventDate;
+        const updated = j.events.find(e=>e.eventAction==='last changed')?.eventDate || j.events.find(e=>e.eventAction==='last update of RDAP database')?.eventDate;
+        if (created) h.push(li('Created', new Date(created).toLocaleString()));
+        if (updated) h.push(li('Updated', new Date(updated).toLocaleString()));
+        if (expires) h.push(li('Expires', new Date(expires).toLocaleString()));
+      }
+      if (j.entities && j.entities.length) {
+        const ents = j.entities.map(e=>`${e.roles?.join('/') || 'entity'}: ${e.vcardArray?.[1]?.find(v=>v[0]==='fn')?.[3] || e.handle || ''}`).join('<br/>');
+        h.push(`<div class="mt-2 text-xs">${ents}</div>`);
+      }
+      els.whoisInfo.innerHTML = h.join('') + (h.length ? '' : pre(j));
+    }
+
+    function renderSSL(j) {
+      if (!j || !j.status) { els.sslInfo.textContent = 'No SSL data.'; return; }
+      if (j.status === 'ERROR') { els.sslInfo.textContent = 'SSL Labs returned ERROR or rate limit.'; return; }
+      const ep = (j.endpoints||[])[0] || {};
+      const details = ep.details || {};
+      const cert = details.cert || {};
+      const grade = ep.grade || j.grade || '-';
+      const issuer = cert.issuerLabel || cert.issuerSubject || '-';
+      const notBefore = cert.notBefore ? new Date(cert.notBefore).toLocaleString() : '-';
+      const notAfter = cert.notAfter ? new Date(cert.notAfter).toLocaleString() : '-';
+      const expired = cert.notAfter ? (Date.now() > cert.notAfter) : null;
+
+      let html = '';
+      html += li('Grade', grade);
+      html += li('Issuer', issuer);
+      html += li('Valid From', notBefore);
+      html += li('Valid To', notAfter + (expired ? ' <span class="text-red-400">(Expired)</span>' : ''));
+      if (details.protocols) {
+        html += `<div class="mt-2"><span class="text-slate-400">Protocols:</span> ${(details.protocols||[]).map(p=>`${p.name} ${p.version}`).join(', ') || '-'}</div>`;
+      }
+      if (details.suites && details.suites.list) {
+        html += `<div class="mt-2 text-xs text-slate-400">Key Exch/Forward Secrecy: ${details.forwardSecrecy === 2 ? 'Yes' : details.forwardSecrecy === 1 ? 'Some' : 'No'}</div>`;
+      }
+      els.sslInfo.innerHTML = html;
+    }
+
+    // --------------------- Orchestrator ---------------------
+    async function runRecon() {
+      const raw = strip(els.target.value);
+      if (!raw) { alert('Enter a domain or IP'); return; }
+
+      clearPanels();
+      setLoading(els.hostLoader, true);
+      setLoading(els.asnLoader, true);
+      setLoading(els.sslLoader, true);
+      setLoading(els.portsLoader, true);
+      setLoading(els.whoisLoader, true);
+
+      let host = raw;
+      let ip = null;
+
+      try {
+        if (isIP(raw)) {
+          ip = raw;
+          renderHost(raw, [raw]);
+        } else {
+          const ips = await resolveA(raw);
+          ip = ips[0] || null;
+          renderHost(raw, ips);
+        }
+      } catch (e) {
+        renderHost(raw, []);
+      } finally {
+        setLoading(els.hostLoader, false);
+      }
+
+      // Hosting / ASN
+      try {
+        if (ip) {
+          const j = await getIpIntel(ip);
+          renderASN(j);
+        } else {
+          els.asnInfo.textContent = 'No IP resolved.';
+        }
+      } catch (e) {
+        els.asnInfo.textContent = 'Failed to fetch IP intel.';
+      } finally { setLoading(els.asnLoader, false); }
+
+      // Ports
+      try {
+        if (ip) {
+          const j = await getOpenPorts(ip);
+          renderPorts(j);
+        } else {
+          els.portsInfo.textContent = 'No IP resolved.';
+        }
+      } catch (e) {
+        els.portsInfo.textContent = 'Failed to fetch open ports.';
+      } finally { setLoading(els.portsLoader, false); }
+
+      // WHOIS / RDAP
+      try {
+        if (isIP(raw)) {
+          const j = await getRdapIP(raw);
+          renderWHOIS(j);
+        } else {
+          const j = await getRdapDomain(raw);
+          renderWHOIS(j);
+        }
+      } catch (e) {
+        els.whoisInfo.textContent = 'Failed to fetch RDAP/WHOIS.';
+      } finally { setLoading(els.whoisLoader, false); }
+
+      // SSL (hostnames only)
+      try {
+        if (!isIP(raw)) {
+          const j = await getSslAnalysis(raw);
+          renderSSL(j);
+        } else {
+          els.sslInfo.textContent = 'SSL analysis requires a hostname.';
+        }
+      } catch (e) {
+        els.sslInfo.textContent = 'SSL Labs query failed or rate-limited.';
+      } finally { setLoading(els.sslLoader, false); }
+    }
+
+    // --------------------- Event wiring ---------------------
+    els.scanBtn.addEventListener('click', runRecon);
+    els.resetBtn.addEventListener('click', () => { els.target.value = ''; clearPanels(); });
+    els.target.addEventListener('keydown', (e) => { if (e.key === 'Enter') runRecon(); });
+  </script>
+</body>
 </html>
