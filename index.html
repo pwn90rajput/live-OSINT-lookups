@@ -1,685 +1,502 @@
-# We'll generate a new enhanced index.html based on the user's uploaded file,
-# expanding it to ~30 tools and adding multi-provider fallbacks (5 where feasible).
-# The UI remains dark and minimal, and only this single file is produced.
-
-from pathlib import Path
-
-html = r'''<!DOCTYPE html>
+<!doctype html>
 <html lang="en">
 <head>
-  <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>OSINT Recon Dashboard — Pro (Enhanced)</title>
-  <!-- Tailwind CSS CDN -->
-  <script src="https://cdn.tailwindcss.com"></script>
-  <style>
-    :root { color-scheme: dark; }
-    body { background: #0b0f10; font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace; }
-    .neon { text-shadow: 0 0 10px rgba(0,255,170,.3), 0 0 25px rgba(0,255,170,.15); }
-    .panel { background: #0f1619; border: 1px solid #17343b; box-shadow: inset 0 0 0 1px #0b2a2e; }
-    .spinner { width: 18px; height: 18px; border: 3px solid #16343a; border-top-color: #29f7c4; border-radius: 50%; animation: spin 1s linear infinite; }
-    @keyframes spin { to { transform: rotate(360deg); } }
-    a.link { color:#7dece0; }
-    a.link:hover { text-decoration: underline; }
-    code.k { background:#0b1216; border:1px solid #234; border-bottom-width:3px; border-right-width:3px; padding:.1rem .35rem; border-radius:.35rem; }
-    .grid-auto { display:grid; grid-template-columns: repeat(auto-fit,minmax(280px,1fr)); gap:1rem; }
-    .badge { font-size:10px; padding:2px 6px; border:1px solid #245; border-radius:999px; background:#0a1216; color:#86f5e4;}
-  </style>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1"/>
+<title>OSINT — Pro</title>
+<style>
+  :root{
+    --bg:#05070a;--panel:#0a0f14;--soft:#0f151c;--muted:#7f9bb0;
+    --neon:#00ffc8;--red:#ff5c5c;--ink:#cfe7f2
+  }
+  *{box-sizing:border-box}
+  html,body{height:100%}
+  body{
+    margin:0;background:radial-gradient(1200px 600px at 10% -10%,#061018 10%,#05070a 55%) no-repeat #05070a;
+    color:var(--ink);font:14px/1.5 ui-monospace,SFMono-Regular,Menlo,Consolas,monospace
+  }
+  .wrap{padding:16px;max-width:1400px;margin:0 auto}
+  .bar{display:flex;gap:10px;align-items:center;margin-bottom:12px;flex-wrap:wrap}
+  .title{font-weight:700;letter-spacing:.02em;color:var(--ink);text-shadow:0 0 14px rgba(0,255,200,.35)}
+  .pill{border:1px solid rgba(255,255,255,.08);border-radius:9999px;padding:.2rem .55rem;color:var(--muted);font-size:12px}
+  .input{flex:1;min-width:220px;background:linear-gradient(180deg,#0b1220,#0a0f14);color:var(--ink);
+         border:1px solid rgba(255,255,255,.08);outline:0;border-radius:12px;padding:.55rem .75rem}
+  .btn{background:linear-gradient(180deg,rgba(0,255,200,.14),rgba(0,255,200,.08));color:#dffff8;
+       border:1px solid rgba(0,255,200,.35);border-radius:12px;padding:.55rem .9rem;cursor:pointer}
+  .btn:active{transform:translateY(1px)}
+  .ghost{background:transparent;border:1px solid rgba(255,255,255,.08);color:var(--muted)}
+  .grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(320px,1fr));gap:10px}
+  .card{background:linear-gradient(180deg,rgba(255,255,255,.035),rgba(255,255,255,.02));
+        border:1px solid rgba(255,255,255,.06);border-radius:14px;padding:10px}
+  .card h3{margin:0 0 6px 0;color:#cfe7f2;font-size:13px;font-weight:600;letter-spacing:.02em}
+  .top{display:flex;align-items:center;justify-content:space-between;margin-bottom:4px}
+  .list{list-style:none;margin:0;padding:0;max-height:260px;overflow:auto}
+  .row{display:flex;align-items:flex-start;gap:7px}
+  .dot{width:10px;height:10px;border-radius:50%;margin-top:3px;background:transparent;border:2px solid rgba(255,255,255,.2)}
+  .ok{background:var(--neon);border:none;box-shadow:0 0 10px rgba(0,255,200,.35)}
+  .err{background:var(--red);border:none;box-shadow:0 0 10px rgba(255,92,92,.25)}
+  .link{color:#b7f7ff;text-decoration:underline;text-decoration-style:dotted}
+  .hint{color:#9ec7d1;font-size:12px;margin-left:6px;opacity:.9}
+  .count{font-size:11px;color:var(--muted);border:1px solid rgba(255,255,255,.08);padding:.15rem .45rem;border-radius:9999px}
+  .open{border:1px solid rgba(255,255,255,.1);color:#bde; padding:.18rem .45rem;border-radius:8px;background:transparent;font-size:11px}
+  .foot{margin-top:10px;color:var(--muted);font-size:11px}
+  .tog{display:flex;gap:8px;align-items:center;color:var(--muted);font-size:12px}
+  .tabs{display:flex;gap:6px;align-items:center}
+  .tab{border:1px solid rgba(255,255,255,.08);border-radius:9999px;padding:.2rem .55rem;color:var(--muted);font-size:12px;cursor:pointer;background:transparent}
+  .tab.active{border-color:rgba(0,255,200,.45);color:#dffff8}
+</style>
 </head>
-<body class="text-slate-200">
-  <header class="px-4 py-5 md:px-8 sticky top-0 z-10 backdrop-blur bg-black/40 border-b border-teal-900/40">
-    <div class="flex items-center justify-between gap-4">
-      <h1 class="text-xl md:text-2xl font-semibold text-teal-300 neon">OSINT Recon Dashboard — Pro</h1>
-      <div class="text-xs md:text-sm text-teal-400">Passive lookups only • client-side</div>
+<body>
+  <div class="wrap">
+    <div class="bar" role="toolbar" aria-label="OSINT controls">
+      <span class="title" aria-label="OSINT Pro">OSINT<span style="color:var(--neon)">_</span>Pro</span>
+      <div class="tabs" aria-label="Type filter">
+        <button class="tab active" data-scope="auto" title="Auto-detect domain or IP">Auto</button>
+        <button class="tab" data-scope="domain" title="Force domain tools">Domain</button>
+        <button class="tab" data-scope="ip" title="Force IP tools">IP</button>
+      </div>
+      <span class="pill">domain / ip</span>
+      <input id="target" class="input" placeholder="example.com  or  8.8.8.8" aria-label="Target"/>
+      <button id="runBtn" class="btn" title="Run recon">Run Recon</button>
+      <label class="tog"><input type="checkbox" id="showAll"/> Show all tool groups</label>
+      <button id="exportJson" class="ghost btn" title="Export JSON of results">Export</button>
+      <button id="clearBtn" class="ghost btn" title="Clear results and input">Clear</button>
     </div>
-  </header>
 
-  <main class="p-4 md:p-8 space-y-6">
-    <!-- Target Input -->
-    <section class="panel rounded-2xl p-4 md:p-6">
-      <div class="flex flex-col md:flex-row md:items-end gap-4">
-        <div class="grow">
-          <label class="block text-sm text-slate-400 mb-1">Target (Domain or IP)</label>
-          <input id="target" type="text" placeholder="example.com or 8.8.8.8" class="w-full rounded-xl bg-black/40 border border-teal-900/50 px-4 py-2 focus:outline-none focus:ring-2 focus:ring-teal-500/60" />
-        </div>
-        <div class="flex gap-2">
-          <button id="scanBtn" class="rounded-xl px-4 py-2 bg-teal-500/20 hover:bg-teal-500/30 border border-teal-600/50">Run Recon</button>
-          <button id="resetBtn" class="rounded-xl px-4 py-2 bg-slate-700/40 hover:bg-slate-700/60 border border-slate-600/60">Clear</button>
+    <div id="results" class="grid"></div>
+    <div class="foot">client-side • passive lookups • if no data, link stays</div>
+  </div>
+
+  <template id="cardTpl">
+    <div class="card">
+      <div class="top">
+        <h3></h3>
+        <div style="display:flex;gap:6px;align-items:center">
+          <span class="count" title="Provider count"></span>
+          <button class="open" title="Open all provider links">Open</button>
         </div>
       </div>
-      <div class="mt-3 text-xs text-slate-400">Press <code class="k">Enter</code> to run. Works entirely in-browser on GitHub Pages (HTTPS).</div>
-    </section>
+      <ul class="list"></ul>
+    </div>
+  </template>
 
-    <!-- Results Grid -->
-    <section class="grid-auto" id="grid">
-      <!-- Panels will be injected here by JS to keep the file concise. -->
-    </section>
+<script>
+  // utils
+  const $ = (id)=>document.getElementById(id);
+  const sleep=(ms)=>new Promise(r=>setTimeout(r,ms));
+  const trim=s=>s.replace(/^\s+|\s+$/g,'');
+  // FIX: proper JS regex literals (no double backslashes)
+  const isIPv4=s=>/^\d{1,3}(?:\.\d{1,3}){3}$/.test(s);
+  const isIPv6=s=>/^[0-9a-f:]+$/i.test(s);
+  const isIP=s=>isIPv4(s)||isIPv6(s);
+  const aTag=(url,label='open')=>{const a=document.createElement('a');a.href=url;a.target='_blank';a.rel='noopener';a.textContent=label;a.className='link';return a;}
+  const line=(status,label,url,hint)=>{const li=document.createElement('li');const row=document.createElement('div');row.className='row';
+    const dot=document.createElement('div');dot.className='dot'; if(status==='ok')dot.classList.add('ok'); if(status==='err')dot.classList.add('err'); row.appendChild(dot);
+    const wrap=document.createElement('div');const strong=document.createElement('span');strong.textContent=label+': ';strong.style.color='#8aa0b5';wrap.appendChild(strong);
+    if(url)wrap.appendChild(aTag(url)); if(hint){const code=document.createElement('span');code.className='hint';code.textContent=hint;wrap.appendChild(code);}
+    row.appendChild(wrap); li.appendChild(row); return li; };
 
-    <section class="text-xs text-slate-500 leading-relaxed">
-      <p><strong>Legal:</strong> Use only on assets you own or are explicitly authorized to test. This dashboard performs passive/API lookups over HTTPS; it does not actively scan targets.</p>
-      <p>Multiple providers are queried per tool (up to 5) to improve reliability without API keys.</p>
-    </section>
-  </main>
+  // 30+ tools with up to 5 fallbacks. Keep labels terse.
+  // NOTE: api endpoints contain the literal "${t}" token, which we replace at runtime.
+  const TOOLS = [
+    {name:"WHOIS",type:"domain",providers:[
+      {n:"who.is",link:t=>`https://who.is/whois/${t}`},
+      {n:"ipwhois",link:t=>`https://ipwhois.io/whois/${t}`,api:`https://r.jina.ai/http://ipwhois.app/json/\${t}?objects=whois`},
+      {n:"viewdns",link:t=>`https://viewdns.info/whois/?domain=${t}`},
+      {n:"host.io",link:t=>`https://host.io/${t}`},
+      {n:"rdap",link:t=>`https://rdap.org/domain/${t}`,api:`https://r.jina.ai/http://rdap.org/domain/\${t}`}
+    ]},
+    {name:"DNS",type:"domain",providers:[
+      {n:"cf",link:t=>`https://cloudflare-dns.com/dns-query?name=${t}`,api:`https://r.jina.ai/https://cloudflare-dns.com/dns-query?name=\${t}&type=A`},
+      {n:"google",link:t=>`https://dns.google/resolve?name=${t}`,api:`https://r.jina.ai/https://dns.google/resolve?name=\${t}&type=A`},
+      {n:"opendns",link:t=>`https://www.dnsomatic.com/`},
+      {n:"quad9",link:t=>`https://www.quad9.net/`},
+      {n:"he",link:t=>`https://bgp.he.net/dns/${t}`}
+    ]},
+    {name:"Subs",type:"domain",providers:[
+      {n:"crt.sh",link:t=>`https://crt.sh/?q=${t}`,api:`https://r.jina.ai/https://crt.sh/?q=\${t}&output=json`},
+      {n:"rapiddns",link:t=>`https://rapiddns.io/subdomain/${t}?full=1`},
+      {n:"riddler",link:t=>`https://riddler.io/search?q=${t}`},
+      {n:"jldc",link:t=>`https://jldc.me/anubis/subdomains/${t}`,api:`https://r.jina.ai/https://jldc.me/anubis/subdomains/\${t}`},
+      {n:"certspot",link:t=>`https://certspotter.com/api/v0/certs?domain=${t}`,api:`https://r.jina.ai/https://certspotter.com/api/v0/certs?domain=\${t}&include_subdomains=true&expand=dns_names`}
+    ]},
+    {name:"Certs",type:"domain",providers:[
+      {n:"crt.sh",link:t=>`https://crt.sh/?q=${t}`,api:`https://r.jina.ai/https://crt.sh/?q=\${t}&output=json`},
+      {n:"transparency",link:t=>`https://transparency.dev/`},
+      {n:"censys",link:t=>`https://search.censys.io/certificates?q=${t}`},
+      {n:"shodan",link:t=>`https://www.shodan.io/search?query=ssl.cert.subject.CN%3A${t}`},
+      {n:"leaks",link:t=>`https://crt.sh/?Identity=${t}`}
+    ]},
+    {name:"HTTP",type:"domain",providers:[
+      {n:"httpx",link:t=>`https://httpx.akto.io/?url=${t}`},
+      {n:"status",link:t=>`https://httpstatus.io/`},
+      {n:"preview",link:t=>`https://r.jina.ai/http://api.linkpreview.net/?q=${t}`,api:`https://r.jina.ai/http://api.linkpreview.net/?q=\${t}`},
+      {n:"headers",link:t=>`https://securityheaders.com/?q=${t}&followRedirects=on`},
+      {n:"dnslytics",link:t=>`https://dnslytics.com/domain/${t}`}
+    ]},
+    {name:"IPs by Host",type:"domain",providers:[
+      {n:"dns.google",link:t=>`https://dns.google/resolve?name=${t}`,api:`https://r.jina.ai/https://dns.google/resolve?name=\${t}&type=A`},
+      {n:"cf-dns",link:t=>`https://cloudflare-dns.com/dns-query?name=${t}&type=A`,api:`https://r.jina.ai/https://cloudflare-dns.com/dns-query?name=\${t}&type=A`},
+      {n:"ahrefs",link:t=>`https://ahrefs.com/ip/${t}`},
+      {n:"viewdns",link:t=>`https://viewdns.info/iphistory/?domain=${t}`},
+      {n:"host.io",link:t=>`https://host.io/${t}`}
+    ]},
+    {name:"RevIP",type:"ip",providers:[
+      {n:"viewdns",link:t=>`https://viewdns.info/reverseip/?host=${t}`},
+      {n:"dnstrails",link:t=>`https://securitytrails.com/list/ip/${t}`},
+      {n:"rapiddns",link:t=>`https://rapiddns.io/sameip/${t}`},
+      {n:"ygs",link:t=>`https://www.yougetsignal.com/tools/web-sites-on-web-server/${t}`},
+      {n:"dnslytics",link:t=>`https://dnslytics.com/ip/${t}`}
+    ]},
+    {name:"IP Intel",type:"ip",providers:[
+      {n:"ip-api",link:t=>`http://ip-api.com/${t}`,api:`https://r.jina.ai/http://ip-api.com/json/\${t}`},
+      {n:"ipinfo",link:t=>`https://ipinfo.io/${t}`,api:`https://r.jina.ai/https://ipinfo.io/\${t}/json`},
+      {n:"ipwhois",link:t=>`https://ipwhois.io/${t}`,api:`https://r.jina.ai/http://ipwhois.app/json/\${t}`},
+      {n:"ipapi",link:t=>`https://ipapi.co/${t}/`,api:`https://r.jina.ai/https://ipapi.co/\${t}/json/`},
+      {n:"db-ip",link:t=>`https://db-ip.com/${t}`,api:`https://r.jina.ai/https://api.db-ip.com/v2/free/\${t}`}
+    ]},
+    {name:"ASN",type:"any",providers:[
+      {n:"he",link:t=>`https://bgp.he.net/ip/${t}`},
+      {n:"bgp.tools",link:t=>`https://bgp.tools/search?q=${t}`},
+      {n:"peeringdb",link:t=>`https://www.peeringdb.com/advanced_search?q=${t}`},
+      {n:"qrator",link:t=>`https://radar.qrator.net/search/${t}`},
+      {n:"ripe",link:t=>`https://stat.ripe.net/${isIP(t)?'data/whats-my-ip':'app/launchpad'}`}
+    ]},
+    {name:"PDNS",type:"domain",providers:[
+      {n:"securitytrails",link:t=>`https://securitytrails.com/domain/${t}/history/a`},
+      {n:"viewdns",link:t=>`https://viewdns.info/iphistory/?domain=${t}`},
+      {n:"dnsdb",link:t=>`https://dnsdb.io/en/`},
+      {n:"passivetotal",link:t=>`https://community.riskiq.com/search/${t}`},
+      {n:"robtex",link:t=>`https://www.robtex.com/dns-lookup/${t}`}
+    ]},
+    {name:"Rep",type:"any",providers:[
+      {n:"vt",link:t=>`https://www.virustotal.com/gui/search/${t}`},
+      {n:"urlscan",link:t=>`https://urlscan.io/search/#${t}`,api:`https://r.jina.ai/https://urlscan.io/api/v1/search/?q=\${t}`},
+      {n:"otx",link:t=>`https://otx.alienvault.com/indicator/${isIP(t)?'ip':'domain'}/${t}`},
+      {n:"abuseipdb",link:t=>`https://www.abuseipdb.com/check/${t}`},
+      {n:"threatfox",link:t=>`https://threatfox.abuse.ch/browse.php?search=${t}`}
+    ]},
+    {name:"Leaks",type:"domain",providers:[
+      {n:"hibp",link:t=>`https://haveibeenpwned.com/`},
+      {n:"dehashed",link:t=>`https://www.dehashed.com/search?query=${t}`},
+      {n:"intelx",link:t=>`https://intelx.io/?s=${t}`},
+      {n:"pwndb",link:t=>`https://pwndb2am4tzkvold.tor2web.org/`},
+      {n:"leakpeek",link:t=>`https://leakpeek.com/`}
+    ]},
+    {name:"Tech",type:"domain",providers:[
+      {n:"wapp",link:t=>`https://www.wappalyzer.com/lookup/${t}`},
+      {n:"builtwith",link:t=>`https://builtwith.com/${t}`},
+      {n:"whatcms",link:t=>`https://whatcms.org/?s=${t}`},
+      {n:"dnslytics",link:t=>`https://dnslytics.com/domain/${t}`},
+      {n:"nmap",link:t=>`https://nmap.online/`}
+    ]},
+    {name:"Shots",type:"domain",providers:[
+      {n:"urlscan",link:t=>`https://urlscan.io/search/#${t}`,api:`https://r.jina.ai/https://urlscan.io/api/v1/search/?q=\${t}`},
+      {n:"wayback",link:t=>`https://web.archive.org/web/*/${t}`},
+      {n:"screenshotone",link:t=>`https://screenshotone.com/`},
+      {n:"pagelr",link:t=>`https://pagefreezer.com/`},
+      {n:"archive.today",link:t=>`https://archive.today/${t}`}
+    ]},
+    {name:"Wayback",type:"domain",providers:[
+      {n:"cdx",link:t=>`https://web.archive.org/cdx/search/cdx?url=${t}&output=json`,api:`https://r.jina.ai/https://web.archive.org/cdx/search/cdx?url=\${t}&output=json`},
+      {n:"timemap",link:t=>`https://web.archive.org/web/timemap/json/${t}`,api:`https://r.jina.ai/https://web.archive.org/web/timemap/json/\${t}`},
+      {n:"captures",link:t=>`https://web.archive.org/web/*/${t}`},
+      {n:"memento",link:t=>`https://timetravel.mementoweb.org/list/${t}`},
+      {n:"save",link:t=>`https://web.archive.org/save/${t}`}
+    ]},
+    {name:"Mail",type:"domain",providers:[
+      {n:"MX",link:t=>`https://dns.google/resolve?name=${t}&type=MX`,api:`https://r.jina.ai/https://dns.google/resolve?name=\${t}&type=MX`},
+      {n:"SPF",link:t=>`https://dns.google/resolve?name=${t}&type=TXT`,api:`https://r.jina.ai/https://dns.google/resolve?name=\${t}&type=TXT`},
+      {n:"DMARC",link:t=>`https://dmarcian.com/dmarc-inspector/${t}`},
+      {n:"MTA-STS",link:t=>`https://mta-sts.github.io/${t}`},
+      {n:"autodiscover",link:t=>`https://${t}/autodiscover/autodiscover.xml`,api:`https://r.jina.ai/https://${t}/autodiscover/autodiscover.xml`}
+    ]},
+    {name:"Chains",type:"domain",providers:[
+      {n:"ssllabs",link:t=>`https://www.ssllabs.com/ssltest/analyze.html?d=${t}`},
+      {n:"badssl",link:t=>`https://badssl.com/`},
+      {n:"crt.sh",link:t=>`https://crt.sh/?q=${t}`,api:`https://r.jina.ai/https://crt.sh/?q=\${t}&output=json`},
+      {n:"digicert",link:t=>`https://www.digicert.com/help/`},
+      {n:"transparency",link:t=>`https://transparencyreport.google.com/https/certificates`}
+    ]},
+    {name:"JS Files",type:"domain",providers:[
+      {n:"webhint",link:t=>`https://scanner.webhint.io/`},
+      {n:"source",link:t=>`https://${t}`,api:`https://r.jina.ai/https://${t}`},
+      {n:"jsdelivr",link:t=>`https://www.jsdelivr.com/?query=${t}`},
+      {n:"cdnjs",link:t=>`https://cdnjs.com/search?q=${t}`},
+      {n:"publicwww",link:t=>`https://publicwww.com/websites/%22${t}%22/`}
+    ]},
+    {name:"Ports",type:"ip",providers:[
+      {n:"shodan",link:t=>`https://www.shodan.io/host/${t}`},
+      {n:"onyphe",link:t=>`https://www.onyphe.io/summary/ip/${t}`},
+      {n:"censys",link:t=>`https://search.censys.io/hosts/${t}`},
+      {n:"fofa",link:t=>`https://en.fofa.info/result?q=${t}`},
+      {n:"zoomeye",link:t=>`https://www.zoomeye.org/searchResult?q=${t}`}
+    ]},
+    {name:"Breach IP",type:"ip",providers:[
+      {n:"greynoise",link:t=>`https://viz.greynoise.io/ip/${t}`,api:`https://r.jina.ai/https://api.greynoise.io/v3/community/\${t}`},
+      {n:"abuseipdb",link:t=>`https://www.abuseipdb.com/check/${t}`},
+      {n:"otx",link:t=>`https://otx.alienvault.com/indicator/ip/${t}`},
+      {n:"threatfox",link:t=>`https://threatfox.abuse.ch/browse.php?search=${t}`},
+      {n:"crowdsec",link:t=>`https://app.crowdsec.net/`}
+    ]},
+    {name:"ASN Whois",type:"any",providers:[
+      {n:"arin",link:t=>`https://search.arin.net/rdap/?query=${t}`},
+      {n:"ripe",link:t=>`https://apps.db.ripe.net/db-web-ui/query?searchtext=${t}`},
+      {n:"apnic",link:t=>`https://wq.apnic.net/static/search.html?query=${t}`},
+      {n:"lacnic",link:t=>`https://rdap.lacnic.net/rdap/autnum/${t}`,api:`https://r.jina.ai/https://rdap.lacnic.net/rdap/autnum/\${t}`},
+      {n:"afrinic",link:t=>`https://rdap.afrinic.net/rdap/autnum/${t}`,api:`https://r.jina.ai/https://rdap.afrinic.net/rdap/autnum/\${t}`}
+    ]},
+    {name:"BGP",type:"any",providers:[
+      {n:"he",link:t=>`https://bgp.he.net/search?search%5Bsearch%5D=${t}`},
+      {n:"bgp.tools",link:t=>`https://bgp.tools/search?q=${t}`},
+      {n:"qrator",link:t=>`https://radar.qrator.net/search/${t}`},
+      {n:"ripe RIS",link:t=>`https://stat.ripe.net/widget/bgp-updates#w.resource=${t}`},
+      {n:"routeviews",link:t=>`http://www.routeviews.org/`}
+    ]},
+    {name:"CDN/Host",type:"domain",providers:[
+      {n:"dnsgrep",link:t=>`https://dnsgrep.dnslookup.online/?q=${t}`},
+      {n:"dnslytics",link:t=>`https://dnslytics.com/domain/${t}`},
+      {n:"securitytrails",link:t=>`https://securitytrails.com/list/apex_domain/${t}`},
+      {n:"cf-radar",link:t=>`https://radar.cloudflare.com/domains/${t}`},
+      {n:"peeringdb",link:t=>`https://www.peeringdb.com/advanced_search?q=${t}`}
+    ]},
+    {name:"Related",type:"domain",providers:[
+      {n:"reverse-whois",link:t=>`https://viewdns.info/reversewhois/?q=${t}`},
+      {n:"publicwww",link:t=>`https://publicwww.com/websites/%22${t}%22/`},
+      {n:"builtwith",link:t=>`https://builtwith.com/relationships/${t}`},
+      {n:"similarweb",link:t=>`https://www.similarweb.com/website/${t}/`},
+      {n:"w3techs",link:t=>`https://w3techs.com/sites/info/${t}`}
+    ]},
+    {name:"Code",type:"domain",providers:[
+      {n:"github",link:t=>`https://github.com/search?q=${t}`},
+      {n:"gitlab",link:t=>`https://gitlab.com/search?search=${t}`},
+      {n:"grep.app",link:t=>`https://grep.app/search?q=${t}`},
+      {n:"gitee",link:t=>`https://search.gitee.com/?q=${t}`},
+      {n:"sourcegraph",link:t=>`https://sourcegraph.com/search?q=context:global+${t}`}
+    ]},
+    {name:"Emails",type:"domain",providers:[
+      {n:"hunter",link:t=>`https://hunter.io/search/${t}`},
+      {n:"clearbit",link:t=>`https://dashboard.clearbit.com/`},
+      {n:"skymem",link:t=>`https://www.skymem.info/srch?q=${t}`},
+      {n:"phonebook",link:t=>`https://phonebook.cz/search?q=${t}`},
+      {n:"rocketreach",link:t=>`https://rocketreach.co/${t}/email-format`}
+    ]},
+    {name:"Takeovers",type:"domain",providers:[
+      {n:"can-i-takeover",link:t=>`https://github.com/EdOverflow/can-i-take-over-xyz`},
+      {n:"subjack",link:t=>`https://github.com/haccer/subjack`},
+      {n:"dns",link:t=>`https://dns.google/resolve?name=${t}`,api:`https://r.jina.ai/https://dns.google/resolve?name=\${t}&type=CNAME`},
+      {n:"httpx",link:t=>`https://httpstatus.io/`},
+      {n:"nmap NSE",link:t=>`https://nmap.org/nsedoc/scripts/http-vhosts.html`}
+    ]},
+    {name:"Robots/Sitemaps",type:"domain",providers:[
+      {n:"robots",link:t=>`https://${t}/robots.txt`,api:`https://r.jina.ai/https://${t}/robots.txt`},
+      {n:"sitemap",link:t=>`https://${t}/sitemap.xml`,api:`https://r.jina.ai/https://${t}/sitemap.xml`},
+      {n:"wayback",link:t=>`https://web.archive.org/web/*/${t}/robots.txt`},
+      {n:"commoncrawl",link:t=>`https://index.commoncrawl.org/`},
+      {n:"urlscan",link:t=>`https://urlscan.io/search/#${t}`,api:`https://r.jina.ai/https://urlscan.io/api/v1/search/?q=\${t}`}
+    ]},
+    {name:"Headers",type:"domain",providers:[
+      {n:"sec-headers",link:t=>`https://securityheaders.com/?q=${t}&followRedirects=on`},
+      {n:"raw",link:t=>`https://${t}`,api:`https://r.jina.ai/https://${t}`},
+      {n:"observatory",link:t=>`https://observatory.mozilla.org/analyze/${t}`},
+      {n:"ssllabs",link:t=>`https://www.ssllabs.com/ssltest/analyze.html?d=${t}`},
+      {n:"hardenize",link:t=>`https://www.hardenize.com/report/${t}`}
+    ]},
+    {name:"JS Secrets",type:"domain",providers:[
+      {n:"trufflehog",link:t=>`https://github.com/trufflesecurity/trufflehog`},
+      {n:"pubwww-key",link:t=>`https://publicwww.com/websites/%22api_key%22%20site:${t}/`},
+      {n:"gists",link:t=>`https://gist.github.com/search?q=${t}+key`},
+      {n:"grep",link:t=>`https://grep.app/search?q=${t}+token`},
+      {n:"urlscan",link:t=>`https://urlscan.io/search/#${t}`,api:`https://r.jina.ai/https://urlscan.io/api/v1/search/?q=\${t}`}
+    ]},
+    {name:"CSP",type:"domain",providers:[
+      {n:"csp-eval",link:t=>`https://csp-evaluator.withgoogle.com/`},
+      {n:"observatory",link:t=>`https://observatory.mozilla.org/analyze/${t}`},
+      {n:"headers",link:t=>`https://${t}`,api:`https://r.jina.ai/https://${t}`},
+      {n:"sec-headers",link:t=>`https://securityheaders.com/?q=${t}&followRedirects=on`},
+      {n:"report-uri",link:t=>`https://report-uri.com/`}
+    ]},
+    {name:"Cookies",type:"domain",providers:[
+      {n:"raw",link:t=>`https://${t}`,api:`https://r.jina.ai/https://${t}`},
+      {n:"wapp",link:t=>`https://www.wappalyzer.com/lookup/${t}`},
+      {n:"builtwith",link:t=>`https://builtwith.com/${t}`},
+      {n:"urlscan",link:t=>`https://urlscan.io/search/#${t}`,api:`https://r.jina.ai/https://urlscan.io/api/v1/search/?q=\${t}`},
+      {n:"privacytests",link:t=>`https://privacytests.org/`}
+    ]},
+    {name:"JS Endpoints",type:"domain",providers:[
+      {n:"gau",link:t=>`https://github.com/lc/gau`},
+      {n:"wayback",link:t=>`https://web.archive.org/cdx/search/cdx?url=${t}/*&output=json`,api:`https://r.jina.ai/https://web.archive.org/cdx/search/cdx?url=\${t}/*&output=json`},
+      {n:"commoncrawl",link:t=>`https://index.commoncrawl.org/`},
+      {n:"katana",link:t=>`https://github.com/projectdiscovery/katana`},
+      {n:"hakrawler",link:t=>`https://github.com/hakluke/hakrawler`}
+    ]},
+    {name:"WAF/CDN",type:"domain",providers:[
+      {n:"wafw00f",link:t=>`https://github.com/EnableSecurity/wafw00f`},
+      {n:"hardenize",link:t=>`https://www.hardenize.com/report/${t}`},
+      {n:"dnslytics",link:t=>`https://dnslytics.com/domain/${t}`},
+      {n:"cf-radar",link:t=>`https://radar.cloudflare.com/domains/${t}`},
+      {n:"shodan",link:t=>`https://www.shodan.io/search?query=${t}`}
+    ]},
+    {name:"Geo/SSL",type:"ip",providers:[
+      {n:"ipinfo",link:t=>`https://ipinfo.io/${t}`,api:`https://r.jina.ai/https://ipinfo.io/\${t}/json`},
+      {n:"db-ip",link:t=>`https://db-ip.com/${t}`,api:`https://r.jina.ai/https://api.db-ip.com/v2/free/\${t}`},
+      {n:"ctlogs",link:t=>`https://crt.sh/?q=${t}`,api:`https://r.jina.ai/https://crt.sh/?q=\${t}&output=json`},
+      {n:"censys",link:t=>`https://search.censys.io/hosts/${t}`},
+      {n:"shodan",link:t=>`https://www.shodan.io/host/${t}`}
+    ]},
+    {name:"Mobile",type:"domain",providers:[
+      {n:"appbrain",link:t=>`https://www.appbrain.com/search?q=${t}`},
+      {n:"play",link:t=>`https://play.google.com/store/search?q=${t}`},
+      {n:"appstore",link:t=>`https://apps.apple.com/us/search?term=${t}`},
+      {n:"apkcombo",link:t=>`https://apkcombo.com/en/search/?q=${t}`},
+      {n:"sdk",link:t=>`https://publicwww.com/websites/%22FirebaseMessaging%22%20site:${t}/`}
+    ]},
+    {name:"Bounties",type:"domain",providers:[
+      {n:"hackerone",link:t=>`https://hackerone.com/programs/search?query=${t}`},
+      {n:"bugcrowd",link:t=>`https://bugcrowd.com/programs?search=${t}`},
+      {n:"intigriti",link:t=>`https://www.intigriti.com/programs`},
+      {n:"yeswehack",link:t=>`https://yeswehack.com/programs`},
+      {n:"federacy",link:t=>`https://federacy.com/`}
+    ]},
+    {name:"Typos",type:"domain",providers:[
+      {n:"twister",link:t=>`https://dnstwister.report/search?q=${t}`},
+      {n:"dnsgrep",link:t=>`https://dnsgrep.dnslookup.online/?q=${t}`},
+      {n:"crt.sh",link:t=>`https://crt.sh/?q=${t}`,api:`https://r.jina.ai/https://crt.sh/?q=\${t}&output=json`},
+      {n:"urlscan",link:t=>`https://urlscan.io/search/#${t}`,api:`https://r.jina.ai/https://urlscan.io/api/v1/search/?q=\${t}`},
+      {n:"rapiddns",link:t=>`https://rapiddns.io/subdomain/${t}?full=1`}
+    ]},
+    {name:"TXT",type:"domain",providers:[
+      {n:"TXT",link:t=>`https://dns.google/resolve?name=${t}&type=TXT`,api:`https://r.jina.ai/https://dns.google/resolve?name=\${t}&type=TXT`},
+      {n:"spf",link:t=>`https://dns.google/resolve?name=${t}&type=TXT`,api:`https://r.jina.ai/https://dns.google/resolve?name=\${t}&type=TXT`},
+      {n:"dmarc",link:t=>`https://dns.google/resolve?name=_dmarc.${t}&type=TXT`,api:`https://r.jina.ai/https://dns.google/resolve?name=_dmarc.\${t}&type=TXT`},
+      {n:"mta-sts",link:t=>`https://dns.google/resolve?name=mta-sts.${t}&type=TXT`,api:`https://r.jina.ai/https://dns.google/resolve?name=mta-sts.\${t}&type=TXT`},
+      {n:"bimi",link:t=>`https://dns.google/resolve?name=default._bimi.${t}&type=TXT`,api:`https://r.jina.ai/https://dns.google/resolve?name=default._bimi.\${t}&type=TXT`}
+    ]},
+    {name:"Policies",type:"domain",providers:[
+      {n:"security.txt",link:t=>`https://${t}/.well-known/security.txt`,api:`https://r.jina.ai/https://${t}/.well-known/security.txt`},
+      {n:"humans.txt",link:t=>`https://${t}/humans.txt`,api:`https://r.jina.ai/https://${t}/humans.txt`},
+      {n:"ads.txt",link:t=>`https://${t}/ads.txt`,api:`https://r.jina.ai/https://${t}/ads.txt`},
+      {n:"app-ads.txt",link:t=>`https://${t}/app-ads.txt`,api:`https://r.jina.ai/https://${t}/app-ads.txt`},
+      {n:"well-known",link:t=>`https://${t}/.well-known/`,api:`https://r.jina.ai/https://${t}/.well-known/`}
+    ]},
+    {name:"CDN Use",type:"domain",providers:[
+      {n:"cdnjs",link:t=>`https://publicwww.com/websites/cdnjs%20site:${t}/`},
+      {n:"jsdelivr",link:t=>`https://publicwww.com/websites/jsdelivr%20site:${t}/`},
+      {n:"googleapis",link:t=>`https://publicwww.com/websites/googleapis.com%20site:${t}/`},
+      {n:"gstatic",link:t=>`https://publicwww.com/websites/gstatic.com%20site:${t}/`},
+      {n:"fonts",link:t=>`https://publicwww.com/websites/fonts.gstatic.com%20site:${t}/`}
+    ]},
+    {name:"Login",type:"domain",providers:[
+      {n:"wayback",link:t=>`https://web.archive.org/web/*/${t}/*login*`},
+      {n:"urlscan",link:t=>`https://urlscan.io/search/#${t}+login`,api:`https://r.jina.ai/https://urlscan.io/api/v1/search/?q=\${t}+login`},
+      {n:"publicwww",link:t=>`https://publicwww.com/websites/%22login%22%20site:${t}/`},
+      {n:"grep",link:t=>`https://grep.app/search?q=${t}+login`},
+      {n:"github",link:t=>`https://github.com/search?q=${t}+login`}
+    ]},
+    {name:"Forms",type:"domain",providers:[
+      {n:"live",link:t=>`https://${t}`,api:`https://r.jina.ai/https://${t}`},
+      {n:"wayback",link:t=>`https://web.archive.org/web/*/${t}/*form*`},
+      {n:"urlscan",link:t=>`https://urlscan.io/search/#${t}+form`,api:`https://r.jina.ai/https://urlscan.io/api/v1/search/?q=\${t}+form`},
+      {n:"grep",link:t=>`https://grep.app/search?q=${t}+form`},
+      {n:"publicwww",link:t=>`https://publicwww.com/websites/%22form%22%20site:${t}/`}
+    ]},
+    {name:"IPs Seen",type:"domain",providers:[
+      {n:"urlscan",link:t=>`https://urlscan.io/search/#${t}`,api:`https://r.jina.ai/https://urlscan.io/api/v1/search/?q=\${t}`},
+      {n:"threatcrowd",link:t=>`https://www.threatcrowd.org/domain.php?domain=${t}`},
+      {n:"viewdns",link:t=>`https://viewdns.info/iphistory/?domain=${t}`},
+      {n:"securitytrails",link:t=>`https://securitytrails.com/domain/${t}/history/a`},
+      {n:"robtex",link:t=>`https://www.robtex.com/dns-lookup/${t}`}
+    ]},
+    {name:"HTML Meta",type:"domain",providers:[
+      {n:"fetch",link:t=>`https://${t}`,api:`https://r.jina.ai/https://${t}`},
+      {n:"wayback",link:t=>`https://web.archive.org/web/*/${t}`},
+      {n:"headers",link:t=>`https://securityheaders.com/?q=${t}`},
+      {n:"builtwith",link:t=>`https://builtwith.com/${t}`},
+      {n:"wapp",link:t=>`https://www.wappalyzer.com/lookup/${t}`}
+    ]}
+  ]; // end TOOLS
 
-  <script>
-    // ========= Utility =========
-    const Q = (id) => document.getElementById(id);
-    const isIP = (v) => /^((\\d{1,3}\\.){3}\\d{1,3}|[a-fA-F0-9:]+)$/.test(v);
-    const strip = (s='') => s.trim().replace(/^https?:\\/\\//i, '').replace(/\\/$/, '');
-    const esc = (s='') => s.replace(/[&<>\\"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','\"':'&quot;'}[c]));
-    const sleep = (ms) => new Promise(r=>setTimeout(r,ms));
-    const timeout = (p, ms, tag='timeout') => Promise.race([p, new Promise((_,rej)=>setTimeout(()=>rej(new Error(tag)),ms))]);
-    const toJSON = async (r) => (await r.text() || '{}');
-    const asJSON = (t) => { try { return JSON.parse(t); } catch { return {}; } };
+  const allowed=(tool,t,scope,showAll)=> {
+    if (showAll) return true;
+    if (scope==='domain') return tool.type==='domain' || tool.type==='any';
+    if (scope==='ip') return tool.type==='ip' || tool.type==='any';
+    // auto
+    return tool.type==='any'||(tool.type==='domain'&&!isIP(t))||(tool.type==='ip'&&isIP(t));
+  };
 
-    // Try a list of endpoints until one works
-    async function tryProviders(providers) {
-      let lastErr;
-      for (const p of providers) {
-        try {
-          const res = await timeout(fetch(p.url, p.init || {}), p.timeout || 8000);
-          if (!res.ok) throw new Error('bad status');
-          if (p.kind === 'json') {
-            const txt = await res.text();
-            const j = asJSON(txt);
-            if (Object.keys(j).length) return {provider:p.name, data:j};
-          } else if (p.kind === 'text') {
-            const txt = await res.text();
-            if (txt && txt.length) return {provider:p.name, data:txt};
-          } else if (p.kind === 'buffer') {
-            const buf = await res.arrayBuffer();
-            if (buf && buf.byteLength) return {provider:p.name, data:buf};
-          }
-        } catch(e) {
-          lastErr = e;
-        }
-      }
-      throw lastErr || new Error('all providers failed');
-    }
+  const makeCard=(tool,target)=>{
+    const tpl=document.getElementById('cardTpl').content.cloneNode(true);
+    const root=tpl.querySelector('.card');
+    tpl.querySelector('h3').textContent=tool.name;
+    tpl.querySelector('.count').textContent=tool.providers.length.toString();
+    const list=tpl.querySelector('.list');
+    tpl.querySelector('.open').addEventListener('click',()=>tool.providers.forEach(p=>window.open(p.link(target),'_blank','noopener')));
 
-    // Panels meta (~32 tools)
-    const TOOLS = [
-      ['Host & DNS A', 'hostA'],
-      ['Host & DNS AAAA', 'hostAAAA'],
-      ['Reverse DNS (PTR)', 'ptr'],
-      ['DNS Records (NS/MX/TXT)', 'dns'],
-      ['DNSSEC / DS', 'dnssec'],
-      ['WHOIS / RDAP', 'rdap'],
-      ['IP Intel', 'ipintel'],
-      ['Hosting / ASN', 'asn'],
-      ['BGP / Prefix', 'bgp'],
-      ['Open Ports (Passive)', 'ports'],
-      ['SSL/TLS (SSL Labs)', 'ssl'],
-      ['Certificate Transparency', 'ct'],
-      ['Subdomains (from CT)', 'subs'],
-      ['HSTS Preload', 'hsts'],
-      ['Security Contact (security.txt)', 'sectxt'],
-      ['robots.txt', 'robots'],
-      ['sitemap.xml', 'sitemap'],
-      ['URLScan Findings', 'urlscan'],
-      ['Wayback Snapshots', 'wayback'],
-      ['Favicon Hash', 'favicon'],
-      ['HTML Tech Hints', 'tech'],
-      ['OpenGraph/Meta', 'meta'],
-      ['CSP Headers (fetch proxy)', 'csp'],
-      ['HTTP Status', 'httpstat'],
-      ['mail hosts (SPF parse)', 'spf'],
-      ['DMARC policy', 'dmarc'],
-      ['DKIM selector guess', 'dkim'],
-      ['GeoIP (multi)', 'geoip'],
-      ['ASN peers/links', 'asnlinks'],
-      ['Package.json/manifest hints', 'manifest'],
-      ['Well-known (list)', 'wellknown'],
-      ['Breach search pointers', 'breachlinks'],
-    ];
-
-    // Build grid
-    const grid = Q('grid');
-    TOOLS.forEach(([title, key])=>{
-      const idLoader = key+'Loader', idInfo = key+'Info';
-      const panel = document.createElement('div');
-      panel.className = 'panel rounded-2xl p-4';
-      panel.innerHTML = '<div class="flex items-center justify-between mb-2">'+
-        '<h3 class="text-teal-300">'+esc(title)+'</h3>'+
-        '<div id="'+idLoader+'" class="hidden spinner"></div>'+
-        '</div>'+
-        '<div id="'+idInfo+'" class="text-sm space-y-2 text-slate-300"></div>';
-      grid.appendChild(panel);
-    });
-
-    // Helpers
-    function setLoading(id, on){ const el=Q(id); if(el) el.classList.toggle('hidden', !on); }
-    function setHTML(id, html){ const el=Q(id); if(el) el.innerHTML = html; }
-
-    // Basic renderers
-    function li(k,v){ return '<div><span class="text-slate-400">'+k+':</span> <span class="text-slate-200">'+(v??'-')+'</span></div>'; }
-    function table(head, rows){ return '<table class="w-full text-xs border border-slate-700/40"><thead class="text-slate-400"><tr>'+head.map(h=>'<th class="px-2 py-1 text-left">'+h+'</th>').join('')+'</tr></thead><tbody>'+rows.join('')+'</tbody></table>'; }
-
-    // mmh3 for favicon hashing (over base64)
-    function mmh3(str, seed=0){ let h1=seed,k1=0; const c1=0xcc9e2d51,c2=0x1b873593; let i=0; for(let bytes=str.length-(str.length%4); i<bytes; ){ k1=(str.charCodeAt(i++)&255)|((str.charCodeAt(i++)&255)<<8)|((str.charCodeAt(i++)&255)<<16)|((str.charCodeAt(i++)&255)<<24); k1=Math.imul(k1,c1); k1=(k1<<15)|(k1>>>17); k1=Math.imul(k1,c2); h1^=k1; h1=(h1<<13)|(h1>>>19); h1=Math.imul(h1,5)+0xe6546b64;} k1=0; switch(str.length%4){case 3:k1^=(str.charCodeAt(i+2)&255)<<16; case 2:k1^=(str.charCodeAt(i+1)&255)<<8; case 1:k1^=(str.charCodeAt(i)&255); k1=Math.imul(k1,c1); k1=(k1<<15)|(k1>>>17); k1=Math.imul(k1,c2); h1^=k1;} h1^=str.length; h1^=h1>>>16; h1=Math.imul(h1,0x85ebca6b); h1^=h1>>>13; h1=Math.imul(h1,0xc2b2ae35); h1^=h1>>>16; return h1|0; }
-    function bytesToB64(buf){ const bytes=new Uint8Array(buf); let bin=''; for(let i=0;i<bytes.length;i++) bin+=String.fromCharCode(bytes[i]); return btoa(bin); }
-
-    // Providers by tool (each up to 5)
-    function dohProviders(name, type){ // many DoH resolvers
-      const q = encodeURIComponent(name);
-      return [
-        {name:'Google DoH', kind:'json', url:`https://dns.google/resolve?name=${q}&type=${type}`},
-        {name:'Cloudflare DoH', kind:'json', url:`https://cloudflare-dns.com/dns-query?name=${q}&type=${type}`},
-        {name:'Quad9 DoH', kind:'json', url:`https://dns.quad9.net/dns-query?name=${q}&type=${type}`},
-        {name:'OpenDNS DoH', kind:'json', url:`https://doh.opendns.com/dns-query?name=${q}&type=${type}`},
-        {name:'AdGuard DoH', kind:'json', url:`https://dns.adguard.com/dns-query?name=${q}&type=${type}`},
-      ];
-    }
-
-    function ipIntelProviders(ip){
-      const q = encodeURIComponent(ip);
-      return [
-        {name:'ipwho.is', kind:'json', url:`https://ipwho.is/${q}?security=1`},
-        {name:'ipapi.co', kind:'json', url:`https://ipapi.co/${q}/json/`},
-        {name:'ip-api.com', kind:'json', url:`https://r.jina.ai/https://ip-api.com/json/${q}`}, // via proxy for CORS
-        {name:'BigDataCloud', kind:'json', url:`https://r.jina.ai/https://api.bigdatacloud.net/data/ip-geolocation?ip=${q}&localityLanguage=en`},
-        {name:'FreeGeoIP.app', kind:'json', url:`https://r.jina.ai/https://freegeoip.app/json/${q}`},
-      ];
-    }
-
-    function bgpProviders(ip){
-      const q=encodeURIComponent(ip);
-      return [
-        {name:'BGPView', kind:'json', url:`https://api.bgpview.io/ip/${q}`},
-        {name:'RIPEstat (origin ASN)', kind:'json', url:`https://stat.ripe.net/data/whats-my-asn/data.json?resource=${q}`},
-        {name:'RIPEstat (prefix overview)', kind:'json', url:`https://stat.ripe.net/data/prefix-overview/data.json?resource=${q}`},
-        {name:'Team Cymru (DNS over HTTPS)', kind:'json', url:`https://dns.google/resolve?name=${q}.origin.asn.cymru.com&type=TXT`},
-        {name:'iptoasn.com', kind:'json', url:`https://r.jina.ai/https://api.iptoasn.com/v1/as/ip/${q}`},
-      ];
-    }
-
-    function ctProviders(domain){
-      const d=encodeURIComponent(domain);
-      return [
-        {name:'crt.sh', kind:'text', url:`https://r.jina.ai/https://crt.sh/?q=%25.${d}&output=json`},
-        {name:'certspotter', kind:'json', url:`https://r.jina.ai/https://api.certspotter.com/v1/issuances?domain=${d}&include_subdomains=true&expand=dns_names,issuer&match=domain`},
-        {name:'leaked certs (censys pages)', kind:'text', url:`https://r.jina.ai/https://search.censys.io/certificates?q=${d}`},
-        {name:'Rapid7 OpenData (page)', kind:'text', url:`https://r.jina.ai/https://opendata.rapid7.com/sonar.ssl/`},
-        {name:'Google Transparency Report (page)', kind:'text', url:`https://r.jina.ai/https://transparencyreport.google.com/https/certificates`},
-      ];
-    }
-
-    function urlscanProviders(domain){
-      const d=encodeURIComponent(domain);
-      return [
-        {name:'urlscan.io', kind:'json', url:`https://urlscan.io/api/v1/search/?q=domain:${d}`},
-        {name:'CommonCrawl (page)', kind:'text', url:`https://r.jina.ai/https://index.commoncrawl.org/`},
-        {name:'AlienVault OTX (page)', kind:'text', url:`https://r.jina.ai/https://otx.alienvault.com/indicator/domain/${d}`},
-        {name:'SecurityTrails (page)', kind:'text', url:`https://r.jina.ai/https://securitytrails.com/domain/${d}`},
-        {name:'Talos Intelligence (page)', kind:'text', url:`https://r.jina.ai/https://talosintelligence.com/reputation_center/lookup?search=${d}`},
-      ];
-    }
-
-    function waybackProviders(domain){
-      const d=encodeURIComponent(domain);
-      return [
-        {name:'CDX', kind:'json', url:`https://web.archive.org/cdx/search/cdx?url=${d}/*&output=json&limit=10&filter=statuscode:200&collapse=digest`},
-        {name:'CDX via proxy', kind:'json', url:`https://r.jina.ai/https://web.archive.org/cdx/search/cdx?url=${d}/*&output=json&limit=10&filter=statuscode:200&collapse=digest`},
-        {name:'Availability', kind:'json', url:`https://archive.org/wayback/available?url=${d}`},
-        {name:'Memento TimeMap (page)', kind:'text', url:`https://r.jina.ai/http://timetravel.mementoweb.org/list/${d}`},
-        {name:'Webcitation (page)', kind:'text', url:`https://r.jina.ai/https://www.webcitation.org/query?url=${d}`},
-      ];
-    }
-
-    function faviconProviders(host){
-      const h=encodeURIComponent(host);
-      return [
-        {name:'Direct', kind:'buffer', url:`https://${h}/favicon.ico`},
-        {name:'via r.jina.ai', kind:'buffer', url:`https://r.jina.ai/https://${h}/favicon.ico`},
-        {name:'/favicon.png', kind:'buffer', url:`https://${h}/favicon.png`},
-        {name:'/apple-touch-icon.png', kind:'buffer', url:`https://${h}/apple-touch-icon.png`},
-        {name:'/apple-touch-icon-precomposed.png', kind:'buffer', url:`https://${h}/apple-touch-icon-precomposed.png`},
-      ];
-    }
-
-    function htmlProviders(host){
-      const h=encodeURIComponent(host);
-      return [
-        {name:'via r.jina.ai', kind:'text', url:`https://r.jina.ai/https://${h}/`},
-        {name:'http->proxy', kind:'text', url:`https://r.jina.ai/http://${h}/`},
-        {name:'www via proxy', kind:'text', url:`https://r.jina.ai/https://www.${h}/`},
-        {name:'root robots', kind:'text', url:`https://r.jina.ai/https://${h}/robots.txt`},
-        {name:'root sitemap', kind:'text', url:`https://r.jina.ai/https://${h}/sitemap.xml`},
-      ];
-    }
-
-    // ======== RUNNERS ========
-    async function run(){
-      const raw = strip(Q('target').value);
-      if(!raw){ alert('Enter a domain or IP'); return; }
-      const isIp = isIP(raw);
-      const host = raw;
-
-      // Loading toggles
-      TOOLS.forEach(([_, key])=> setLoading(key+'Loader', true) );
-
-      // Host & DNS A / AAAA
-      try {
-        const A = await tryProviders(dohProviders(host,'A'));
-        setHTML('hostAInfo', li('Host', host)+li('Provider', A.provider)+li('A', (A.data.Answer||[]).map(a=>a.data).join(', ')||'—'));
-      } catch { setHTML('hostAInfo', 'A record lookup failed.'); }
-      finally { setLoading('hostALoader', false); }
-
-      try {
-        const AAAA = await tryProviders(dohProviders(host,'AAAA'));
-        setHTML('hostAAAAInfo', li('Host', host)+li('Provider', AAAA.provider)+li('AAAA', (AAAA.data.Answer||[]).map(a=>a.data).join(', ')||'—'));
-      } catch { setHTML('hostAAAAInfo', 'AAAA lookup failed.'); }
-      finally { setLoading('hostAAAALoader', false); }
-
-      // PTR when IP
-      try {
-        if (isIp) {
-          const PTR = await tryProviders(dohProviders(host,'PTR'));
-          setHTML('ptrInfo', li('Provider', PTR.provider)+li('PTR', (PTR.data.Answer||[]).map(a=>a.data).join(', ')||'—'));
-        } else {
-          setHTML('ptrInfo','Provide an IP for reverse DNS.');
-        }
-      } catch {
-        setHTML('ptrInfo','PTR lookup failed.');
-      } finally { setLoading('ptrLoader', false); }
-
-      // DNS NS/MX/TXT
-      try {
-        if (!isIp) {
-          const [NS, MX, TXT] = await Promise.all([
-            tryProviders(dohProviders(host,'NS')),
-            tryProviders(dohProviders(host,'MX')),
-            tryProviders(dohProviders(host,'TXT')),
-          ]);
-          setHTML('dnsInfo',
-            '<div class="text-xs mb-1">NS via '+NS.provider+', MX via '+MX.provider+', TXT via '+TXT.provider+'</div>'+
-            '<div class="grid grid-cols-3 gap-3 text-xs">'+
-              '<div><div class="text-slate-400">NS</div>'+((NS.data.Answer||[]).map(a=>esc(a.data)).join('<br/>')||'—')+'</div>'+
-              '<div><div class="text-slate-400">MX</div>'+((MX.data.Answer||[]).map(a=>esc(a.data)).join('<br/>')||'—')+'</div>'+
-              '<div><div class="text-slate-400">TXT</div>'+((TXT.data.Answer||[]).map(a=>esc(a.data.replace(/^\"|\"$/g,""))).join('<br/>')||'—')+'</div>'+
-            '</div>');
-        } else setHTML('dnsInfo','DNS details require a domain.');
-      } catch { setHTML('dnsInfo','DNS lookups failed.'); }
-      finally { setLoading('dnsLoader', false); }
-
-      // DNSSEC / DS
-      try{
-        if(!isIp){
-          const DS = await tryProviders(dohProviders(host,'DS'));
-          const has = (DS.data.Answer||[]).length ? 'present' : 'none';
-          setHTML('dnssecInfo', li('Provider', DS.provider)+li('DS Records', has));
-        } else setHTML('dnssecInfo','DS requires domain.');
-      } catch { setHTML('dnssecInfo','DS lookup failed.'); }
-      finally { setLoading('dnssecLoader', false); }
-
-      // RDAP
-      try {
-        const p = !isIp
-          ? {name:'rdap.org', kind:'json', url:`https://rdap.org/domain/${encodeURIComponent(host)}`}
-          : {name:'rdap.org', kind:'json', url:`https://rdap.org/ip/${encodeURIComponent(host)}`};
-        const rd = await tryProviders([
-          p,
-          {name:'IANA bootstrap (page)', kind:'text', url:`https://r.jina.ai/https://www.iana.org/domains/root/db`},
-          {name:'whois.com (page)', kind:'text', url:`https://r.jina.ai/https://www.whois.com/whois/${encodeURIComponent(host)}`},
-          {name:'ICANN Lookup (page)', kind:'text', url:`https://r.jina.ai/https://lookup.icann.org/en/lookup`},
-          {name:'Verisign RDAP (com) (json?)', kind:'json', url:`https://r.jina.ai/https://rdap.verisign.com/com/v1/domain/${encodeURIComponent(host)}`}
-        ]);
-        const j = typeof rd.data === 'string' ? {} : rd.data;
-        let rows = [];
-        if (j.ldhName) rows.push(li('Domain', j.ldhName));
-        if (j.name) rows.push(li('Name', j.name));
-        if (j.handle) rows.push(li('Handle', j.handle));
-        if (j.events){
-          const created=j.events.find(e=>e.eventAction==='registration')?.eventDate;
-          const expires=j.events.find(e=>e.eventAction==='expiration')?.eventDate;
-          const updated=j.events.find(e=>e.eventAction.includes('last'))?.eventDate;
-          if (created) rows.push(li('Created', new Date(created).toLocaleString()));
-          if (updated) rows.push(li('Updated', new Date(updated).toLocaleString()));
-          if (expires) rows.push(li('Expires', new Date(expires).toLocaleString()));
-        }
-        setHTML('rdapInfo', '<div class="text-xs mb-1">Provider: '+rd.provider+'</div>'+ (rows.join('')||'No structured RDAP data (fallback page used).'));
-      } catch { setHTML('rdapInfo','RDAP failed.'); }
-      finally { setLoading('rdapLoader', false); }
-
-      // IP Intel + ASN + GeoIP
-      try {
-        const ip = isIp ? host : ((await tryProviders(dohProviders(host,'A'))).data.Answer||[])[0]?.data;
-        if (!ip) throw new Error('no ip');
-        const intel = await tryProviders(ipIntelProviders(ip));
-        const d = intel.data;
-        setHTML('ipintelInfo',
-          li('Provider', intel.provider)+
-          li('IP', d.ip || ip)+
-          li('Org', (d.connection?.org) || d.org || d.asn || '-')+
-          li('ISP', d.connection?.isp || d.org || '-')+
-          li('Country/City', (d.country_name||d.country||d.country_code||'-')+' / '+(d.city||'-'))+
-          (d.security ? li('Threat flags', ['proxy','tor','vpn','bot'].filter(k=>d.security['is_'+k]).join(', ')||'none') : '')
-        );
-        setHTML('asnInfo', li('ASN', d.connection?.asn || d.asn || '-') + li('Range', d.connection?.route || d.network || '-'));
-        setHTML('geoipInfo', li('Lat/Lon', (d.latitude??d.lat??'-')+', '+(d.longitude??d.lon??'-')) + li('Timezone', d.timezone || d.time_zone||'-'));
-      } catch { setHTML('ipintelInfo','IP intel failed.'); setHTML('asnInfo','-'); setHTML('geoipInfo','-'); }
-      finally { setLoading('ipintelLoader', false); setLoading('asnLoader', false); setLoading('geoipLoader', false); }
-
-      // BGP
-      try{
-        const ip = isIp ? host : ((await tryProviders(dohProviders(host,'A'))).data.Answer||[])[0]?.data;
-        if (!ip) throw new Error('no ip');
-        const b = await tryProviders(bgpProviders(ip));
-        const j = b.data;
-        let prefix = j.data?.prefixes?.[0]?.prefix || j.data?.prefix || j.data?.prefixes?.[0] || j.prefix || '-';
-        let asn = (j.data?.asn?.asn) || (j.data?.asns?.[0]?.asn) || j.asn || '-';
-        setHTML('bgpInfo', li('Provider', b.provider)+li('ASN', asn)+li('Prefix', prefix));
-      } catch { setHTML('bgpInfo','BGP query failed.'); }
-      finally { setLoading('bgpLoader', false); }
-
-      // Ports (Shodan only public no-key; keep single but allow mirror via proxy)
-      try{
-        const ip = isIp ? host : ((await tryProviders(dohProviders(host,'A'))).data.Answer||[])[0]?.data;
-        if (!ip) throw new Error('no ip');
-        const p = await tryProviders([
-          {name:'Shodan InternetDB', kind:'json', url:`https://internetdb.shodan.io/${encodeURIComponent(ip)}`},
-          {name:'Shodan via proxy', kind:'json', url:`https://r.jina.ai/https://internetdb.shodan.io/${encodeURIComponent(ip)}`},
-          {name:'Hunter.how (page)', kind:'text', url:`https://r.jina.ai/https://hunter.how/`},
-          {name:'LeakIX (page)', kind:'text', url:`https://r.jina.ai/https://leakix.net/host/${encodeURIComponent(ip)}`},
-          {name:'ZoomEye (page)', kind:'text', url:`https://r.jina.ai/https://www.zoomeye.org/searchResult?q=${encodeURIComponent(ip)}`},
-        ]);
-        if (typeof p.data === 'string'){
-          setHTML('portsInfo','Passive open ports: unavailable via fallback page.');
-        } else {
-          const ports = p.data.ports || [];
-          setHTML('portsInfo', li('Provider', p.provider)+li('Open Ports', ports.length? ports.join(', '):'—'));
-        }
-      } catch { setHTML('portsInfo','Open ports fetch failed.'); }
-      finally { setLoading('portsLoader', false); }
-
-      // SSL Labs
-      async function sslLabs(host){
-        let r = await fetch(`https://api.ssllabs.com/api/v3/analyze?host=${encodeURIComponent(host)}&all=done&fromCache=on`);
-        let j = await r.json();
-        if(!j.status || (j.status!=='READY' && j.status!=='ERROR')){
-          await fetch(`https://api.ssllabs.com/api/v3/analyze?host=${encodeURIComponent(host)}&publish=off&all=done&startNew=on`);
-          for(let i=0;i<10;i++){ await sleep(4000); const rr = await fetch(`https://api.ssllabs.com/api/v3/analyze?host=${encodeURIComponent(host)}&all=done`); j = await rr.json(); if(j.status==='READY'||j.status==='ERROR') break; }
-        }
-        return j;
-      }
-      try{
-        if(!isIp){
-          const j = await sslLabs(host);
-          if(j.status==='READY'){
-            const ep=(j.endpoints||[])[0]||{}; const details=ep.details||{}; const cert=details.cert||{};
-            setHTML('sslInfo', li('Grade', ep.grade||'-') + li('Issuer', cert.issuerLabel||'-') + li('Valid To', cert.notAfter? new Date(cert.notAfter).toLocaleString():'-'));
-          } else setHTML('sslInfo','SSL Labs pending or error.');
-        } else setHTML('sslInfo','Use a hostname.');
-      } catch { setHTML('sslInfo','SSL query failed.'); }
-      finally { setLoading('sslLoader', false); }
-
-      // CT + Subdomains
-      try{
-        if(!isIp){
-          const ct = await tryProviders(ctProviders(host));
-          if (ct.provider==='crt.sh'){
-            let arr; try{ arr = JSON.parse(ct.data); }catch{ arr = ct.data.trim().split('\\n').map(l=>{ try{return JSON.parse(l);}catch{return null;}}).filter(Boolean); }
-            const rows = arr.slice(0,30).map(x=>'<tr>'+['common_name','name_value','issuer_name','not_after'].map(k=>'<td class="px-2 py-1 border border-slate-700/40">'+esc(String((x[k]||'')).replace(/\\n/g,' , '))+'</td>').join('')+'</tr>');
-            setHTML('ctInfo','<div class="text-xs mb-2">Provider: '+ct.provider+'</div>'+table(['CN','DNS Names','Issuer','Not After'], rows));
-            const subs = new Set();
-            arr.forEach(x=> String(x.name_value||'').split('\\n').forEach(n=>{ n=n.trim().toLowerCase(); if(n.endsWith('.'+host.toLowerCase())||n===host.toLowerCase()) subs.add(n); }));
-            setHTML('subsInfo', '<div class="text-xs mb-1">From CT (deduped, max 50)</div>' + Array.from(subs).slice(0,50).map(s=>'<div class="text-xs">'+esc(s)+'</div>').join(''));
-          } else {
-            setHTML('ctInfo','CT fallback page loaded ('+ct.provider+').');
-            setHTML('subsInfo','Subdomain list unavailable with fallback.');
-          }
-        } else { setHTML('ctInfo','Use a domain.'); setHTML('subsInfo','-'); }
-      } catch { setHTML('ctInfo','CT query failed.'); setHTML('subsInfo','-'); }
-      finally { setLoading('ctLoader', false); setLoading('subsLoader', false); }
-
-      // HSTS
-      try{
-        if(!isIp){
-          const h = await tryProviders([
-            {name:'hstspreload.org', kind:'json', url:`https://hstspreload.org/api/v2/status?domain=${encodeURIComponent(host)}`},
-            {name:'chromium source (page)', kind:'text', url:`https://r.jina.ai/https://source.chromium.org/chromium/chromium/src/+/main:net/http/transport_security_state_static.json`},
-            {name:'mdn (page)', kind:'text', url:`https://r.jina.ai/https://developer.mozilla.org/en-US/docs/Web/HTTP/Headers/Strict-Transport-Security`},
-            {name:'securityheaders (page)', kind:'text', url:`https://r.jina.ai/https://securityheaders.com/`},
-            {name:'owasp (page)', kind:'text', url:`https://r.jina.ai/https://owasp.org/www-project-secure-headers/`},
-          ]);
-          const j = typeof h.data==='string'?{}:h.data;
-          setHTML('hstsInfo', li('Provider', h.provider) + li('Status', j.status||'-') + li('Preloadable', String(j.preloadable ?? '-')));
-        } else setHTML('hstsInfo','Use a domain.');
-      } catch { setHTML('hstsInfo','HSTS lookup failed.'); }
-      finally { setLoading('hstsLoader', false); }
-
-      // security.txt
-      try{
-        if(!isIp){
-          const s = await tryProviders([
-            {name:'/.well-known/security.txt', kind:'text', url:`https://${host}/.well-known/security.txt`},
-            {name:'/security.txt', kind:'text', url:`https://${host}/security.txt`},
-            {name:'proxy well-known', kind:'text', url:`https://r.jina.ai/https://${host}/.well-known/security.txt`},
-            {name:'proxy root', kind:'text', url:`https://r.jina.ai/https://${host}/security.txt`},
-            {name:'GitHub security policy (page)', kind:'text', url:`https://r.jina.ai/https://github.com/${host}/security/policy`},
-          ]);
-          setHTML('sectxtInfo','<div class="text-xs mb-1">Provider: '+s.provider+'</div><pre class="text-xs bg-black/30 border border-slate-700/40 rounded p-2 overflow-x-auto">'+esc(s.data)+'</pre>');
-        } else setHTML('sectxtInfo','Use a domain.');
-      } catch { setHTML('sectxtInfo','Not published.'); }
-      finally { setLoading('sectxtLoader', false); }
-
-      // robots
-      try{
-        if(!isIp){
-          const r = await tryProviders([
-            {name:'direct', kind:'text', url:`https://${host}/robots.txt`},
-            {name:'proxy', kind:'text', url:`https://r.jina.ai/https://${host}/robots.txt`},
-            {name:'www', kind:'text', url:`https://r.jina.ai/https://www.${host}/robots.txt`},
-            {name:'http', kind:'text', url:`https://r.jina.ai/http://${host}/robots.txt`},
-            {name:'http-www', kind:'text', url:`https://r.jina.ai/http://www.${host}/robots.txt`},
-          ]);
-          setHTML('robotsInfo','<div class="text-xs">Provider: '+r.provider+'</div><pre class="text-xs bg-black/30 border border-slate-700/40 rounded p-2 overflow-x-auto">'+esc(r.data)+'</pre>');
-        } else setHTML('robotsInfo','Use a domain.');
-      } catch { setHTML('robotsInfo','No robots.txt'); }
-      finally { setLoading('robotsLoader', false); }
-
-      // sitemap
-      try{
-        if(!isIp){
-          const s = await tryProviders([
-            {name:'/sitemap.xml', kind:'text', url:`https://${host}/sitemap.xml`},
-            {name:'proxy', kind:'text', url:`https://r.jina.ai/https://${host}/sitemap.xml`},
-            {name:'/sitemap_index.xml', kind:'text', url:`https://${host}/sitemap_index.xml`},
-            {name:'/sitemap.txt', kind:'text', url:`https://${host}/sitemap.txt`},
-            {name:'/robots reference', kind:'text', url:`https://r.jina.ai/https://${host}/robots.txt`},
-          ]);
-          setHTML('sitemapInfo', '<div class="text-xs">Provider: '+s.provider+'</div><pre class="text-xs bg-black/30 border border-slate-700/40 rounded p-2 overflow-x-auto">'+esc(s.data)+'</pre>');
-        } else setHTML('sitemapInfo','Use a domain.');
-      } catch { setHTML('sitemapInfo','No sitemap found.'); }
-      finally { setLoading('sitemapLoader', false); }
-
-      // urlscan
-      try{
-        if(!isIp){
-          const u = await tryProviders(urlscanProviders(host));
-          if (u.provider==='urlscan.io'){
-            const res = u.data.results||[];
-            const rows = res.slice(0,10).map(x=>{
-              const task=x.task||{}, page=x.page||{}; const when=task.time? new Date(task.time).toLocaleString():'-';
-              const url=task.url||page.url||''; const link=(x.result||x._id||''); const a = link? '<a class="link" target="_blank" href="'+link+'">report</a>':'';
-              return '<tr><td class="px-2 py-1 border border-slate-700/40">'+esc(when)+'</td><td class="px-2 py-1 border border-slate-700/40">'+esc(url)+'</td><td class="px-2 py-1 border border-slate-700/40">'+a+'</td></tr>';
-            });
-            setHTML('urlscanInfo', table(['When','URL','Report'], rows));
-          } else setHTML('urlscanInfo', 'Fallback page loaded ('+u.provider+').');
-        } else setHTML('urlscanInfo','Use a domain.');
-      } catch { setHTML('urlscanInfo','urlscan failed.'); }
-      finally { setLoading('urlscanLoader', false); }
-
-      // wayback
-      try{
-        if(!isIp){
-          const w = await tryProviders(waybackProviders(host));
-          if(Array.isArray(w.data)){
-            const rows = w.data.slice(1).map(r=>{
-              const ts=r[1]; const url=r[2]; const date=`${ts.slice(0,4)}-${ts.slice(4,6)}-${ts.slice(6,8)} ${ts.slice(8,10)}:${ts.slice(10,12)}`;
-              const link=`https://web.archive.org/web/${ts}/${url}`;
-              return '<tr><td class="px-2 py-1 border border-slate-700/40">'+date+'</td><td class="px-2 py-1 border border-slate-700/40"><a class="link" target="_blank" href="'+link+'">'+esc(url)+'</a></td></tr>';
-            });
-            setHTML('waybackInfo', table(['When','URL'], rows));
-          } else setHTML('waybackInfo', 'Fallback ('+w.provider+') used.');
-        } else setHTML('waybackInfo','Use a domain.');
-      } catch { setHTML('waybackInfo','Wayback failed.'); }
-      finally { setLoading('waybackLoader', false); }
-
-      // favicon
-      try{
-        if(!isIp){
-          const f = await tryProviders(faviconProviders(host));
-          const b64 = bytesToB64(f.data);
-          const hash = mmh3(b64);
-          setHTML('faviconInfo', li('Provider', f.provider) + li('mmh3', hash) + '<div class="text-xs mt-1"><a class="link" target="_blank" href="https://www.shodan.io/search?query=http.favicon.hash%3A'+hash+'">Search on Shodan</a></div>');
-        } else setHTML('faviconInfo','Use a domain.');
-      } catch { setHTML('faviconInfo','No favicon or blocked.'); }
-      finally { setLoading('faviconLoader', false); }
-
-      // HTML + tech + meta + CSP + http status
-      try{
-        if(!isIp){
-          const h = await tryProviders(htmlProviders(host));
-          const html = h.data.toLowerCase();
-          // Tech
-          const hints=[];
-          const gen = /<meta[^>]+name=["']generator["'][^>]+content=["']([^"']+)/i.exec(h.data); if(gen) hints.push('Generator: '+esc(gen[1]));
-          if(/wp-content\\//.test(html) || /wordpress/.test(html)) hints.push('CMS: WordPress');
-          if(/drupal\\.settings/.test(html)) hints.push('CMS: Drupal');
-          if(/joomla!/.test(h.data)) hints.push('CMS: Joomla');
-          if(/shopify/.test(html)) hints.push('E-com: Shopify');
-          if(/magento/i.test(h.data)) hints.push('E-com: Magento');
-          setHTML('techInfo', (hints.length? hints.map(x=>'<div>'+x+'</div>').join(''):'No obvious tech hints.') );
-
-          // Meta
-          const metas = Array.from(h.data.matchAll(/<meta[^>]+>/gi)).slice(0,30).map(m=>'<div class="text-xs">'+esc(m[0])+'</div>').join('');
-          setHTML('metaInfo','<div class="text-xs mb-1">Provider: '+h.provider+'</div>'+metas);
-
-          // CSP via meta if present
-          const csp = /<meta[^>]+http-equiv=["']content-security-policy["'][^>]+content=["']([^"']+)/i.exec(h.data);
-          setHTML('cspInfo', csp ? '<div class="text-xs mb-1">From meta tag</div><pre class="text-xs bg-black/30 border border-slate-700/40 rounded p-2 overflow-x-auto">'+esc(csp[1])+'</pre>' : 'No inline CSP meta.');
-
-          // HTTP Status (best-effort via archive availability)
+    (async()=>{
+      for(const p of tool.providers){
+        const li=line('load',p.n,p.link(target));
+        list.appendChild(li); await sleep(20);
+        if(p.api){
           try{
-            const avail = await tryProviders([{name:'Wayback avail', kind:'json', url:`https://archive.org/wayback/available?url=${encodeURIComponent(host)}`}]);
-            const arch = avail.data?.archived_snapshots?.closest;
-            setHTML('httpstatInfo', arch ? li('Closest archive', arch.available+' at '+arch.timestamp) : 'No status available.');
-          } catch { setHTML('httpstatInfo','No status available.'); }
-        } else { setHTML('techInfo','Use a domain.'); setHTML('metaInfo','-'); setHTML('cspInfo','-'); setHTML('httpstatInfo','-'); }
-      } catch { setHTML('techInfo','HTML fetch blocked.'); setHTML('metaInfo','-'); setHTML('cspInfo','-'); setHTML('httpstatInfo','-'); }
-      finally { setLoading('techLoader', false); setLoading('metaLoader', false); setLoading('cspLoader', false); setLoading('httpstatLoader', false); }
-
-      // SPF / DMARC / DKIM
-      try{
-        if(!isIp){
-          const TXT = await tryProviders(dohProviders(host,'TXT'));
-          const txts = (TXT.data.Answer||[]).map(a=>a.data.replace(/^\"|\"$/g,'')).filter(Boolean);
-          const spf = txts.find(t=>/^v=spf1\\s/i.test(t)) || '-';
-          setHTML('spfInfo', li('Provider', TXT.provider)+li('SPF', esc(spf)));
-        } else setHTML('spfInfo','Use a domain.');
-      } catch { setHTML('spfInfo','SPF lookup failed.'); }
-      finally { setLoading('spfLoader', false); }
-
-      try{
-        if(!isIp){
-          const DM = await tryProviders(dohProviders('_dmarc.'+host,'TXT'));
-          const recs = (DM.data.Answer||[]).map(a=>a.data.replace(/^\"|\"$/g,'')).filter(Boolean);
-          setHTML('dmarcInfo', li('Provider', DM.provider)+li('Policy', esc(recs[0]||'-')));
-        } else setHTML('dmarcInfo','Use a domain.');
-      } catch { setHTML('dmarcInfo','No DMARC record.'); }
-      finally { setLoading('dmarcLoader', false); }
-
-      try{
-        if(!isIp){
-          // Guess common DKIM selectors and query
-          const selectors = ['default','google','selector1','selector2','smtp','mail','dkim'];
-          let found = [];
-          for(const s of selectors){
-            try{
-              const r = await tryProviders(dohProviders(`${s}._domainkey.${host}`,'TXT'));
-              const txts = (r.data.Answer||[]).map(a=>a.data.replace(/^\"|\"$/g,''));
-              if(txts.length) found.push(s+': '+txts[0]);
-              if(found.length>=3) break;
-            }catch{}
+            const url=p.api.replaceAll('${t}',encodeURIComponent(target));
+            const res=await fetch(url);
+            if(res.ok){
+              const text=await res.text();
+              const good=!!text && text.length>2 && !/not\s*found|forbidden|denied|error/i.test(text);
+              const repl=line(good?'ok':'err',p.n,p.link(target),good?'ok':'no');
+              li.replaceWith(repl);
+            }else{
+              li.replaceWith(line('err',p.n,p.link(target),res.status.toString()));
+            }
+          }catch(e){
+            li.replaceWith(line('err',p.n,p.link(target),'fetch'));
           }
-          setHTML('dkimInfo', found.length? found.slice(0,3).map(x=>'<div class="text-xs">'+esc(x)+'</div>').join('') : 'No common selectors found.');
-        } else setHTML('dkimInfo','Use a domain.');
-      } catch { setHTML('dkimInfo','DKIM lookup failed.'); }
-      finally { setLoading('dkimLoader', false); }
+        }else{
+          li.replaceWith(line('ok',p.n,p.link(target)));
+        }
+      }
+    })();
 
-      // ASN links
-      try{
-        const ip = isIp ? host : ((await tryProviders(dohProviders(host,'A'))).data.Answer||[])[0]?.data;
-        if (!ip) throw new Error('no ip');
-        const b = await tryProviders(bgpProviders(ip));
-        const asn = b.data?.data?.asn?.asn || b.data?.asns?.[0]?.asn || b.data?.asn || '';
-        const links = [
-          ['BGPView', `https://bgpview.io/asn/${asn}`],
-          ['HE.net', `https://bgp.he.net/AS${asn}`],
-          ['RIPEstat', `https://stat.ripe.net/AS${asn}`],
-          ['PeeringDB', `https://www.peeringdb.com/asn/${asn}`],
-          ['Radar', `https://radar.qrator.net/as${asn}`],
-        ].map(([n,u])=>'<li><a class="link" target="_blank" href="'+u+'">'+n+'</a></li>').join('');
-        setHTML('asnlinksInfo','<ul class="list-disc ml-5 text-xs">'+links+'</ul>');
-      } catch { setHTML('asnlinksInfo','ASN links unavailable.'); }
-      finally { setLoading('asnlinksLoader', false); }
+    return root;
+  };
 
-      // Manifest/package hints
-      try{
-        if(!isIp){
-          const m = await tryProviders([
-            {name:'package.json', kind:'text', url:`https://${host}/package.json`},
-            {name:'package via proxy', kind:'text', url:`https://r.jina.ai/https://${host}/package.json`},
-            {name:'manifest.json', kind:'text', url:`https://${host}/manifest.json`},
-            {name:'manifest via proxy', kind:'text', url:`https://r.jina.ai/https://${host}/manifest.json`},
-            {name:'assetlinks.json', kind:'text', url:`https://r.jina.ai/https://${host}/.well-known/assetlinks.json`},
-          ]);
-          setHTML('manifestInfo', '<div class="text-xs">Provider: '+m.provider+'</div><pre class="text-xs bg-black/30 border border-slate-700/40 rounded p-2 overflow-x-auto">'+esc(m.data)+'</pre>');
-        } else setHTML('manifestInfo','Use a domain.');
-      } catch { setHTML('manifestInfo','No manifest/package found.'); }
-      finally { setLoading('manifestLoader', false); }
+  let currentScope='auto';
 
-      // well-known listing
-      try{
-        if(!isIp){
-          const items = ['security.txt','change-password','keybase.txt','assetlinks.json','apple-app-site-association','humans.txt','ads.txt','gpc.json'];
-          const results = [];
-          for(const w of items){
-            try{
-              const r = await fetch(`https://${host}/.well-known/${w}`);
-              results.push('<div class="text-xs">'+w+' : '+(r.ok?'present':'-')+'</div>');
-            }catch{ results.push('<div class="text-xs">'+w+' : -</div>'); }
-          }
-          setHTML('wellknownInfo', results.join(''));
-        } else setHTML('wellknownInfo','Use a domain.');
-      } catch { setHTML('wellknownInfo','-'); }
-      finally { setLoading('wellknownLoader', false); }
+  function setActiveTab(scope){
+    currentScope=scope;
+    document.querySelectorAll('.tab').forEach(b=>b.classList.toggle('active', b.dataset.scope===scope));
+  }
 
-      // breach search pointers
-      try{
-        if(!isIp){
-          const q = encodeURIComponent(host);
-          setHTML('breachlinksInfo', '<div class="text-xs text-slate-400 mb-1">Quick pivots:</div>'+
-            '<ul class="list-disc ml-5 space-y-1 text-xs">'+
-            '<li><a class="link" target="_blank" href="https://haveibeenpwned.com/DomainSearch">HIBP (domain verification required)</a></li>'+
-            '<li><a class="link" target="_blank" href="https://leakcheck.io/search?name='+q+'">LeakCheck</a></li>'+
-            '<li><a class="link" target="_blank" href="https://dehashed.com/search?query='+q+'">DeHashed</a></li>'+
-            '<li><a class="link" target="_blank" href="https://intelx.io/?s='+q+'">IntelX</a></li>'+
-            '<li><a class="link" target="_blank" href="https://www.google.com/search?q=site:pastebin.com+'+q+'">Pastebin search</a></li>'+
-            '</ul>');
-        } else setHTML('breachlinksInfo','Use a domain.');
-      } catch { setHTML('breachlinksInfo','-'); }
-      finally { setLoading('breachlinksLoader', false); }
-    }
+  async function run(){
+    const t=trim($('target').value||'');
+    if(!t) return;
+    const showAll=$('showAll').checked;
+    const grid=$('results'); grid.innerHTML='';
+    const used=TOOLS.filter(tool=>allowed(tool,t,currentScope,showAll));
+    for(const tool of used) grid.appendChild(makeCard(tool,t));
+  }
 
-    // Events
-    Q('scanBtn').addEventListener('click', run);
-    Q('resetBtn').addEventListener('click', ()=>{ Q('target').value=''; Q('grid').querySelectorAll('[id$="Info"]').forEach(el=>el.innerHTML=''); });
-    Q('target').addEventListener('keydown', e=>{ if(e.key==='Enter') run(); });
-  </script>
+  $('runBtn').addEventListener('click',run);
+  $('target').addEventListener('keydown',e=>{if(e.key==='Enter')run();});
+  $('clearBtn').addEventListener('click',()=>{$('target').value='';$('results').innerHTML='';});
+  $('exportJson').addEventListener('click',()=>{
+    const cards=[...document.querySelectorAll('.card')].map(c=>{
+      const tool=c.querySelector('h3')?.textContent||'';
+      const items=[...c.querySelectorAll('li')].map(li=>{
+        const provider=li.querySelector('span')?.textContent?.replace(/:\s*$/,'')||'';
+        const url=li.querySelector('a')?.href||'';
+        const ok=li.querySelector('.ok')? 'ok' : li.querySelector('.err')? 'err' : 'load';
+        return {provider,url,status:ok};
+      });
+      return {tool,items};
+    });
+    const blob=new Blob([JSON.stringify({target:$('target').value,ts:Date.now(),cards},null,2)],{type:'application/json'});
+    const url=URL.createObjectURL(blob); const a=document.createElement('a'); a.href=url; a.download='osint-export.json'; a.click(); URL.revokeObjectURL(url);
+  });
+
+  document.querySelectorAll('.tab').forEach(btn=>{
+    btn.addEventListener('click',()=>{ setActiveTab(btn.dataset.scope); });
+  });
+</script>
 </body>
 </html>
-'''
-Path('/mnt/data/index.html').write_text(html, encoding='utf-8')
-print("Saved to /mnt/data/index.html")
