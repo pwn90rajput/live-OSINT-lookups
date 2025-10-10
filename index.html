@@ -1,57 +1,70 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="en">
 <head>
-  <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>OSINT — Pro</title>
-  <script src="https://cdn.tailwindcss.com"></script>
-  <style>
-    :root{--bg:#05070a;--panel:#0a0f14;--muted:#7f9bb0;--ink:#cfe7f2;--neon:#00ffc8;--red:#ff5c5c}
-    *{box-sizing:border-box} html,body{height:100%}
-    body{margin:0;background:radial-gradient(1200px 600px at 10% -10%,#061018 10%,#05070a 55%) #05070a no-repeat;
-         color:var(--ink);font:14px/1.5 ui-monospace,SFMono-Regular,Menlo,Consolas,monospace}
-    .wrap{padding:16px;max-width:1400px;margin:0 auto}
-    .bar{display:flex;gap:10px;align-items:center;margin-bottom:12px}
-    .title{font-weight:700;letter-spacing:.02em;text-shadow:0 0 14px rgba(0,255,200,.35)}
-    .pill{border:1px solid rgba(255,255,255,.08);border-radius:9999px;padding:.2rem .55rem;color:var(--muted);font-size:12px}
-    .input{flex:1;min-width:220px;background:linear-gradient(180deg,#0b1220,#0a0f14);color:var(--ink);
-           border:1px solid rgba(255,255,255,.08);outline:0;border-radius:12px;padding:.55rem .75rem}
-    .btn{background:linear-gradient(180deg,rgba(0,255,200,.14),rgba(0,255,200,.08));color:#dffff8;
-         border:1px solid rgba(0,255,200,.35);border-radius:12px;padding:.55rem .9rem;cursor:pointer}
-    .btn:active{transform:translateY(1px)}
-    .ghost{background:transparent;border:1px solid rgba(255,255,255,.08);color:var(--muted)}
-    .grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(320px,1fr));gap:10px}
-    .card{background:linear-gradient(180deg,rgba(255,255,255,.035),rgba(255,255,255,.02));
-          border:1px solid rgba(255,255,255,.06);border-radius:14px;padding:10px}
-    .card h3{margin:0 0 6px 0;color:#cfe7f2;font-size:13px;font-weight:600;letter-spacing:.02em}
-    .top{display:flex;align-items:center;justify-content:space-between;margin-bottom:4px}
-    .list{list-style:none;margin:0;padding:0}
-    .row{display:flex;align-items:flex-start;gap:7px}
-    .dot{width:10px;height:10px;border-radius:50%;margin-top:3px;background:transparent;border:2px solid rgba(255,255,255,.2)}
-    .ok{background:var(--neon);border:none;box-shadow:0 0 10px rgba(0,255,200,.35)}
-    .err{background:var(--red);border:none;box-shadow:0 0 10px rgba(255,92,92,.25)}
-    .link{color:#b7f7ff;text-decoration:underline;text-decoration-style:dotted}
-    .hint{color:#9ec7d1;font-size:12px;margin-left:6px;opacity:.9}
-    .count{font-size:11px;color:var(--muted);border:1px solid rgba(255,255,255,.08);padding:.15rem .45rem;border-radius:9999px}
-    .open{border:1px solid rgba(255,255,255,.1);color:#bde; padding:.18rem .45rem;border-radius:8px;background:transparent;font-size:11px}
-    .foot{margin-top:10px;color:var(--muted);font-size:11px}
-    .spinner{width:14px;height:14px;border-radius:9999px;border:2px solid rgba(255,255,255,.2);border-top-color:var(--neon);animation:spin .7s linear infinite}
-    @keyframes spin{to{transform:rotate(360deg)}}
-  </style>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1"/>
+<title>OSINT — Pro · build-20251010-143018</title>
+<style>
+  :root{
+    --bg:#05070a;--panel:#0a0f14;--soft:#0f151c;--muted:#7f9bb0;
+    --neon:#00ffc8;--red:#ff5c5c;--ink:#cfe7f2
+  }
+  *{box-sizing:border-box}
+  html,body{height:100%}
+  body{
+    margin:0;background:radial-gradient(1200px 600px at 10% -10%,#061018 10%,#05070a 55%) no-repeat #05070a;
+    color:var(--ink);font:14px/1.5 ui-monospace,SFMono-Regular,Menlo,Consolas,monospace
+  }
+  .wrap{padding:16px;max-width:1400px;margin:0 auto}
+  .bar{display:flex;gap:10px;align-items:center;margin-bottom:12px;flex-wrap:wrap}
+  .title{font-weight:700;letter-spacing:.02em;color:var(--ink);text-shadow:0 0 14px rgba(0,255,200,.35)}
+  .pill{border:1px solid rgba(255,255,255,.08);border-radius:9999px;padding:.2rem .55rem;color:var(--muted);font-size:12px}
+  .input{flex:1;min-width:220px;background:linear-gradient(180deg,#0b1220,#0a0f14);color:var(--ink);
+         border:1px solid rgba(255,255,255,.08);outline:0;border-radius:12px;padding:.55rem .75rem}
+  .btn{background:linear-gradient(180deg,rgba(0,255,200,.14),rgba(0,255,200,.08));color:#dffff8;
+       border:1px solid rgba(0,255,200,.35);border-radius:12px;padding:.55rem .9rem;cursor:pointer}
+  .btn:active{transform:translateY(1px)}
+  .ghost{background:transparent;border:1px solid rgba(255,255,255,.08);color:var(--muted)}
+  .grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(320px,1fr));gap:10px}
+  .card{background:linear-gradient(180deg,rgba(255,255,255,.035),rgba(255,255,255,.02));
+        border:1px solid rgba(255,255,255,.06);border-radius:14px;padding:10px}
+  .card h3{margin:0 0 6px 0;color:#cfe7f2;font-size:13px;font-weight:600;letter-spacing:.02em}
+  .top{display:flex;align-items:center;justify-content:space-between;margin-bottom:4px}
+  .list{list-style:none;margin:0;padding:0;max-height:260px;overflow:auto}
+  .row{display:flex;align-items:flex-start;gap:7px}
+  .dot{width:10px;height:10px;border-radius:50%;margin-top:3px;background:transparent;border:2px solid rgba(255,255,255,.2)}
+  .ok{background:var(--neon);border:none;box-shadow:0 0 10px rgba(0,255,200,.35)}
+  .err{background:var(--red);border:none;box-shadow:0 0 10px rgba(255,92,92,.25)}
+  .link{color:#b7f7ff;text-decoration:underline;text-decoration-style:dotted}
+  .hint{color:#9ec7d1;font-size:12px;margin-left:6px;opacity:.9}
+  .count{font-size:11px;color:var(--muted);border:1px solid rgba(255,255,255,.08);padding:.15rem .45rem;border-radius:9999px}
+  .open{border:1px solid rgba(255,255,255,.1);color:#bde; padding:.18rem .45rem;border-radius:8px;background:transparent;font-size:11px}
+  .foot{margin-top:10px;color:var(--muted);font-size:11px}
+  .tog{display:flex;gap:8px;align-items:center;color:var(--muted);font-size:12px}
+  .tabs{display:flex;gap:6px;align-items:center}
+  .tab{border:1px solid rgba(255,255,255,.08);border-radius:9999px;padding:.2rem .55rem;color:var(--muted);font-size:12px;cursor:pointer;background:transparent}
+  .tab.active{border-color:rgba(0,255,200,.45);color:#dffff8}
+</style>
 </head>
 <body>
   <div class="wrap">
-    <div class="bar">
-      <span class="title">OSINT<span style="color:var(--neon)">_</span>Pro</span>
+    <div class="bar" role="toolbar" aria-label="OSINT controls">
+      <span class="title" aria-label="OSINT Pro">OSINT<span style="color:var(--neon)">_</span>Pro</span>
+      <div class="tabs" aria-label="Type filter">
+        <button class="tab active" data-scope="auto" title="Auto-detect domain or IP">Auto</button>
+        <button class="tab" data-scope="domain" title="Force domain tools">Domain</button>
+        <button class="tab" data-scope="ip" title="Force IP tools">IP</button>
+      </div>
       <span class="pill">domain / ip</span>
-      <input id="target" class="input" placeholder="example.com  or  8.8.8.8"/>
-      <button id="runBtn" class="btn">Run</button>
-      <button id="exportJson" class="ghost btn">Export</button>
-      <button id="clearBtn" class="ghost btn">Clear</button>
+      <input id="target" class="input" placeholder="example.com  or  8.8.8.8" aria-label="Target"/>
+      <button id="runBtn" class="btn" title="Run recon">Run Recon</button>
+      <label class="tog"><input type="checkbox" id="showAll"/> Show all tool groups</label>
+      <button id="exportJson" class="ghost btn" title="Export JSON of results">Export</button>
+      <button id="clearBtn" class="ghost btn" title="Clear results and input">Clear</button>
     </div>
 
     <div id="results" class="grid"></div>
-    <div class="foot">client-side • passive lookups • no data? link stays</div>
+    <div class="foot">client-side • passive lookups • if no data, link stays</div>
   </div>
 
   <template id="cardTpl">
@@ -59,8 +72,8 @@
       <div class="top">
         <h3></h3>
         <div style="display:flex;gap:6px;align-items:center">
-          <span class="count"></span>
-          <button class="open">Open</button>
+          <span class="count" title="Provider count"></span>
+          <button class="open" title="Open all provider links">Open</button>
         </div>
       </div>
       <ul class="list"></ul>
@@ -68,10 +81,14 @@
   </template>
 
 <script>
+  // utils
   const $ = (id)=>document.getElementById(id);
   const sleep=(ms)=>new Promise(r=>setTimeout(r,ms));
-  const trim=s=>s.replace(/^\\s+|\\s+$/g,'');
-  const isIP=s=>/^\\d{1,3}(?:\\.\\d{1,3}){3}$/.test(s)||/^[0-9a-f:]+$/i.test(s);
+  const trim=s=>s.replace(/^\s+|\s+$/g,'');
+  // FIX: proper JS regex literals (no double backslashes)
+  const isIPv4=s=>/^\d{1,3}(?:\.\d{1,3}){3}$/.test(s);
+  const isIPv6=s=>/^[0-9a-f:]+$/i.test(s);
+  const isIP=s=>isIPv4(s)||isIPv6(s);
   const aTag=(url,label='open')=>{const a=document.createElement('a');a.href=url;a.target='_blank';a.rel='noopener';a.textContent=label;a.className='link';return a;}
   const line=(status,label,url,hint)=>{const li=document.createElement('li');const row=document.createElement('div');row.className='row';
     const dot=document.createElement('div');dot.className='dot'; if(status==='ok')dot.classList.add('ok'); if(status==='err')dot.classList.add('err'); row.appendChild(dot);
@@ -79,34 +96,32 @@
     if(url)wrap.appendChild(aTag(url)); if(hint){const code=document.createElement('span');code.className='hint';code.textContent=hint;wrap.appendChild(code);}
     row.appendChild(wrap); li.appendChild(row); return li; };
 
-  // provider try helper (timeout + ok check)
-  const fetchWithTimeout=(url, ms=8000)=>Promise.race([fetch(url), new Promise((_,rej)=>setTimeout(()=>rej(new Error('timeout')), ms))]);
-
-  // tools (same as your last message but cleaned; 30+ with up to 5 fallbacks each)
+  // 30+ tools with up to 5 fallbacks. Keep labels terse.
+  // NOTE: api endpoints contain the literal "${t}" token, which we replace at runtime.
   const TOOLS = [
     {name:"WHOIS",type:"domain",providers:[
       {n:"who.is",link:t=>`https://who.is/whois/${t}`},
-      {n:"ipwhois",link:t=>`https://ipwhois.io/whois/${t}`,api:`https://r.jina.ai/http://ipwhois.app/json/${'${t}'}?objects=whois`},
+      {n:"ipwhois",link:t=>`https://ipwhois.io/whois/${t}`,api:`https://r.jina.ai/http://ipwhois.app/json/\${t}?objects=whois`},
       {n:"viewdns",link:t=>`https://viewdns.info/whois/?domain=${t}`},
       {n:"host.io",link:t=>`https://host.io/${t}`},
-      {n:"rdap",link:t=>`https://rdap.org/domain/${t}`,api:`https://r.jina.ai/http://rdap.org/domain/${'${t}'}`}
+      {n:"rdap",link:t=>`https://rdap.org/domain/${t}`,api:`https://r.jina.ai/http://rdap.org/domain/\${t}`}
     ]},
     {name:"DNS",type:"domain",providers:[
-      {n:"cf",link:t=>`https://cloudflare-dns.com/dns-query?name=${t}`,api:`https://r.jina.ai/https://cloudflare-dns.com/dns-query?name=${'${t}'}&type=A`},
-      {n:"google",link:t=>`https://dns.google/resolve?name=${t}`,api:`https://r.jina.ai/https://dns.google/resolve?name=${'${t}'}&type=A`},
+      {n:"cf",link:t=>`https://cloudflare-dns.com/dns-query?name=${t}`,api:`https://r.jina.ai/https://cloudflare-dns.com/dns-query?name=\${t}&type=A`},
+      {n:"google",link:t=>`https://dns.google/resolve?name=${t}`,api:`https://r.jina.ai/https://dns.google/resolve?name=\${t}&type=A`},
       {n:"opendns",link:t=>`https://www.dnsomatic.com/`},
       {n:"quad9",link:t=>`https://www.quad9.net/`},
       {n:"he",link:t=>`https://bgp.he.net/dns/${t}`}
     ]},
     {name:"Subs",type:"domain",providers:[
-      {n:"crt.sh",link:t=>`https://crt.sh/?q=${t}`,api:`https://r.jina.ai/https://crt.sh/?q=${'${t}'}&output=json`},
+      {n:"crt.sh",link:t=>`https://crt.sh/?q=${t}`,api:`https://r.jina.ai/https://crt.sh/?q=\${t}&output=json`},
       {n:"rapiddns",link:t=>`https://rapiddns.io/subdomain/${t}?full=1`},
       {n:"riddler",link:t=>`https://riddler.io/search?q=${t}`},
-      {n:"jldc",link:t=>`https://jldc.me/anubis/subdomains/${t}`,api:`https://r.jina.ai/https://jldc.me/anubis/subdomains/${'${t}'}`},
-      {n:"certspot",link:t=>`https://certspotter.com/api/v0/certs?domain=${t}`,api:`https://r.jina.ai/https://certspotter.com/api/v0/certs?domain=${'${t}'}&include_subdomains=true&expand=dns_names`}
+      {n:"jldc",link:t=>`https://jldc.me/anubis/subdomains/${t}`,api:`https://r.jina.ai/https://jldc.me/anubis/subdomains/\${t}`},
+      {n:"certspot",link:t=>`https://certspotter.com/api/v0/certs?domain=${t}`,api:`https://r.jina.ai/https://certspotter.com/api/v0/certs?domain=\${t}&include_subdomains=true&expand=dns_names`}
     ]},
     {name:"Certs",type:"domain",providers:[
-      {n:"crt.sh",link:t=>`https://crt.sh/?q=${t}`,api:`https://r.jina.ai/https://crt.sh/?q=${'${t}'}&output=json`},
+      {n:"crt.sh",link:t=>`https://crt.sh/?q=${t}`,api:`https://r.jina.ai/https://crt.sh/?q=\${t}&output=json`},
       {n:"transparency",link:t=>`https://transparency.dev/`},
       {n:"censys",link:t=>`https://search.censys.io/certificates?q=${t}`},
       {n:"shodan",link:t=>`https://www.shodan.io/search?query=ssl.cert.subject.CN%3A${t}`},
@@ -115,13 +130,13 @@
     {name:"HTTP",type:"domain",providers:[
       {n:"httpx",link:t=>`https://httpx.akto.io/?url=${t}`},
       {n:"status",link:t=>`https://httpstatus.io/`},
-      {n:"preview",link:t=>`https://r.jina.ai/http://api.linkpreview.net/?q=${t}`,api:`https://r.jina.ai/http://api.linkpreview.net/?q=${'${t}'}`},
+      {n:"preview",link:t=>`https://r.jina.ai/http://api.linkpreview.net/?q=${t}`,api:`https://r.jina.ai/http://api.linkpreview.net/?q=\${t}`},
       {n:"headers",link:t=>`https://securityheaders.com/?q=${t}&followRedirects=on`},
       {n:"dnslytics",link:t=>`https://dnslytics.com/domain/${t}`}
     ]},
     {name:"IPs by Host",type:"domain",providers:[
-      {n:"dns.google",link:t=>`https://dns.google/resolve?name=${t}`,api:`https://r.jina.ai/https://dns.google/resolve?name=${'${t}'}&type=A`},
-      {n:"cf-dns",link:t=>`https://cloudflare-dns.com/dns-query?name=${t}&type=A`,api:`https://r.jina.ai/https://cloudflare-dns.com/dns-query?name=${'${t}'}&type=A`},
+      {n:"dns.google",link:t=>`https://dns.google/resolve?name=${t}`,api:`https://r.jina.ai/https://dns.google/resolve?name=\${t}&type=A`},
+      {n:"cf-dns",link:t=>`https://cloudflare-dns.com/dns-query?name=${t}&type=A`,api:`https://r.jina.ai/https://cloudflare-dns.com/dns-query?name=\${t}&type=A`},
       {n:"ahrefs",link:t=>`https://ahrefs.com/ip/${t}`},
       {n:"viewdns",link:t=>`https://viewdns.info/iphistory/?domain=${t}`},
       {n:"host.io",link:t=>`https://host.io/${t}`}
@@ -134,11 +149,11 @@
       {n:"dnslytics",link:t=>`https://dnslytics.com/ip/${t}`}
     ]},
     {name:"IP Intel",type:"ip",providers:[
-      {n:"ip-api",link:t=>`http://ip-api.com/${t}`,api:`https://r.jina.ai/http://ip-api.com/json/${'${t}'}`},
-      {n:"ipinfo",link:t=>`https://ipinfo.io/${t}`,api:`https://r.jina.ai/https://ipinfo.io/${'${t}'}/json`},
-      {n:"ipwhois",link:t=>`https://ipwhois.io/${t}`,api:`https://r.jina.ai/http://ipwhois.app/json/${'${t}'}`},
-      {n:"ipapi",link:t=>`https://ipapi.co/${t}/`,api:`https://r.jina.ai/https://ipapi.co/${'${t}'}/json/`},
-      {n:"db-ip",link:t=>`https://db-ip.com/${t}`,api:`https://r.jina.ai/https://api.db-ip.com/v2/free/${'${t}'}`}
+      {n:"ip-api",link:t=>`http://ip-api.com/${t}`,api:`https://r.jina.ai/http://ip-api.com/json/\${t}`},
+      {n:"ipinfo",link:t=>`https://ipinfo.io/${t}`,api:`https://r.jina.ai/https://ipinfo.io/\${t}/json`},
+      {n:"ipwhois",link:t=>`https://ipwhois.io/${t}`,api:`https://r.jina.ai/http://ipwhois.app/json/\${t}`},
+      {n:"ipapi",link:t=>`https://ipapi.co/${t}/`,api:`https://r.jina.ai/https://ipapi.co/\${t}/json/`},
+      {n:"db-ip",link:t=>`https://db-ip.com/${t}`,api:`https://r.jina.ai/https://api.db-ip.com/v2/free/\${t}`}
     ]},
     {name:"ASN",type:"any",providers:[
       {n:"he",link:t=>`https://bgp.he.net/ip/${t}`},
@@ -156,7 +171,7 @@
     ]},
     {name:"Rep",type:"any",providers:[
       {n:"vt",link:t=>`https://www.virustotal.com/gui/search/${t}`},
-      {n:"urlscan",link:t=>`https://urlscan.io/search/#${t}`,api:`https://r.jina.ai/https://urlscan.io/api/v1/search/?q=${'${t}'}`},
+      {n:"urlscan",link:t=>`https://urlscan.io/search/#${t}`,api:`https://r.jina.ai/https://urlscan.io/api/v1/search/?q=\${t}`},
       {n:"otx",link:t=>`https://otx.alienvault.com/indicator/${isIP(t)?'ip':'domain'}/${t}`},
       {n:"abuseipdb",link:t=>`https://www.abuseipdb.com/check/${t}`},
       {n:"threatfox",link:t=>`https://threatfox.abuse.ch/browse.php?search=${t}`}
@@ -176,36 +191,36 @@
       {n:"nmap",link:t=>`https://nmap.online/`}
     ]},
     {name:"Shots",type:"domain",providers:[
-      {n:"urlscan",link:t=>`https://urlscan.io/search/#${t}`,api:`https://r.jina.ai/https://urlscan.io/api/v1/search/?q=${'${t}'}`},
+      {n:"urlscan",link:t=>`https://urlscan.io/search/#${t}`,api:`https://r.jina.ai/https://urlscan.io/api/v1/search/?q=\${t}`},
       {n:"wayback",link:t=>`https://web.archive.org/web/*/${t}`},
       {n:"screenshotone",link:t=>`https://screenshotone.com/`},
       {n:"pagelr",link:t=>`https://pagefreezer.com/`},
       {n:"archive.today",link:t=>`https://archive.today/${t}`}
     ]},
     {name:"Wayback",type:"domain",providers:[
-      {n:"cdx",link:t=>`https://web.archive.org/cdx/search/cdx?url=${t}&output=json`,api:`https://r.jina.ai/https://web.archive.org/cdx/search/cdx?url=${'${t}'}&output=json`},
-      {n:"timemap",link:t=>`https://web.archive.org/web/timemap/json/${t}`,api:`https://r.jina.ai/https://web.archive.org/web/timemap/json/${'${t}'}`},
+      {n:"cdx",link:t=>`https://web.archive.org/cdx/search/cdx?url=${t}&output=json`,api:`https://r.jina.ai/https://web.archive.org/cdx/search/cdx?url=\${t}&output=json`},
+      {n:"timemap",link:t=>`https://web.archive.org/web/timemap/json/${t}`,api:`https://r.jina.ai/https://web.archive.org/web/timemap/json/\${t}`},
       {n:"captures",link:t=>`https://web.archive.org/web/*/${t}`},
       {n:"memento",link:t=>`https://timetravel.mementoweb.org/list/${t}`},
       {n:"save",link:t=>`https://web.archive.org/save/${t}`}
     ]},
     {name:"Mail",type:"domain",providers:[
-      {n:"MX",link:t=>`https://dns.google/resolve?name=${t}&type=MX`,api:`https://r.jina.ai/https://dns.google/resolve?name=${'${t}'}&type=MX`},
-      {n:"SPF",link:t=>`https://dns.google/resolve?name=${t}&type=TXT`,api:`https://r.jina.ai/https://dns.google/resolve?name=${'${t}'}&type=TXT`},
+      {n:"MX",link:t=>`https://dns.google/resolve?name=${t}&type=MX`,api:`https://r.jina.ai/https://dns.google/resolve?name=\${t}&type=MX`},
+      {n:"SPF",link:t=>`https://dns.google/resolve?name=${t}&type=TXT`,api:`https://r.jina.ai/https://dns.google/resolve?name=\${t}&type=TXT`},
       {n:"DMARC",link:t=>`https://dmarcian.com/dmarc-inspector/${t}`},
       {n:"MTA-STS",link:t=>`https://mta-sts.github.io/${t}`},
-      {n:"autodiscover",link:t=>`https://${t}/autodiscover/autodiscover.xml`,api:`https://r.jina.ai/https://${'${t}'}/autodiscover/autodiscover.xml`}
+      {n:"autodiscover",link:t=>`https://${t}/autodiscover/autodiscover.xml`,api:`https://r.jina.ai/https://${t}/autodiscover/autodiscover.xml`}
     ]},
     {name:"Chains",type:"domain",providers:[
       {n:"ssllabs",link:t=>`https://www.ssllabs.com/ssltest/analyze.html?d=${t}`},
       {n:"badssl",link:t=>`https://badssl.com/`},
-      {n:"crt.sh",link:t=>`https://crt.sh/?q=${t}`,api:`https://r.jina.ai/https://crt.sh/?q=${'${t}'}&output=json`},
+      {n:"crt.sh",link:t=>`https://crt.sh/?q=${t}`,api:`https://r.jina.ai/https://crt.sh/?q=\${t}&output=json`},
       {n:"digicert",link:t=>`https://www.digicert.com/help/`},
       {n:"transparency",link:t=>`https://transparencyreport.google.com/https/certificates`}
     ]},
     {name:"JS Files",type:"domain",providers:[
       {n:"webhint",link:t=>`https://scanner.webhint.io/`},
-      {n:"source",link:t=>`https://${t}`,api:`https://r.jina.ai/https://${'${t}'}`},
+      {n:"source",link:t=>`https://${t}`,api:`https://r.jina.ai/https://${t}`},
       {n:"jsdelivr",link:t=>`https://www.jsdelivr.com/?query=${t}`},
       {n:"cdnjs",link:t=>`https://cdnjs.com/search?q=${t}`},
       {n:"publicwww",link:t=>`https://publicwww.com/websites/%22${t}%22/`}
@@ -218,7 +233,7 @@
       {n:"zoomeye",link:t=>`https://www.zoomeye.org/searchResult?q=${t}`}
     ]},
     {name:"Breach IP",type:"ip",providers:[
-      {n:"greynoise",link:t=>`https://viz.greynoise.io/ip/${t}`,api:`https://r.jina.ai/https://api.greynoise.io/v3/community/${'${t}'}`},
+      {n:"greynoise",link:t=>`https://viz.greynoise.io/ip/${t}`,api:`https://r.jina.ai/https://api.greynoise.io/v3/community/\${t}`},
       {n:"abuseipdb",link:t=>`https://www.abuseipdb.com/check/${t}`},
       {n:"otx",link:t=>`https://otx.alienvault.com/indicator/ip/${t}`},
       {n:"threatfox",link:t=>`https://threatfox.abuse.ch/browse.php?search=${t}`},
@@ -228,8 +243,8 @@
       {n:"arin",link:t=>`https://search.arin.net/rdap/?query=${t}`},
       {n:"ripe",link:t=>`https://apps.db.ripe.net/db-web-ui/query?searchtext=${t}`},
       {n:"apnic",link:t=>`https://wq.apnic.net/static/search.html?query=${t}`},
-      {n:"lacnic",link:t=>`https://rdap.lacnic.net/rdap/autnum/${t}`,api:`https://r.jina.ai/https://rdap.lacnic.net/rdap/autnum/${'${t}'}`},
-      {n:"afrinic",link:t=>`https://rdap.afrinic.net/rdap/autnum/${t}`,api:`https://r.jina.ai/https://rdap.afrinic.net/rdap/autnum/${'${t}'}`}
+      {n:"lacnic",link:t=>`https://rdap.lacnic.net/rdap/autnum/${t}`,api:`https://r.jina.ai/https://rdap.lacnic.net/rdap/autnum/\${t}`},
+      {n:"afrinic",link:t=>`https://rdap.afrinic.net/rdap/autnum/${t}`,api:`https://r.jina.ai/https://rdap.afrinic.net/rdap/autnum/\${t}`}
     ]},
     {name:"BGP",type:"any",providers:[
       {n:"he",link:t=>`https://bgp.he.net/search?search%5Bsearch%5D=${t}`},
@@ -269,20 +284,20 @@
     {name:"Takeovers",type:"domain",providers:[
       {n:"can-i-takeover",link:t=>`https://github.com/EdOverflow/can-i-take-over-xyz`},
       {n:"subjack",link:t=>`https://github.com/haccer/subjack`},
-      {n:"dns",link:t=>`https://dns.google/resolve?name=${t}`,api:`https://r.jina.ai/https://dns.google/resolve?name=${'${t}'}&type=CNAME`},
+      {n:"dns",link:t=>`https://dns.google/resolve?name=${t}`,api:`https://r.jina.ai/https://dns.google/resolve?name=\${t}&type=CNAME`},
       {n:"httpx",link:t=>`https://httpstatus.io/`},
       {n:"nmap NSE",link:t=>`https://nmap.org/nsedoc/scripts/http-vhosts.html`}
     ]},
     {name:"Robots/Sitemaps",type:"domain",providers:[
-      {n:"robots",link:t=>`https://${t}/robots.txt`,api:`https://r.jina.ai/https://${'${t}'}/robots.txt`},
-      {n:"sitemap",link:t=>`https://${t}/sitemap.xml`,api:`https://r.jina.ai/https://${'${t}'}/sitemap.xml`},
+      {n:"robots",link:t=>`https://${t}/robots.txt`,api:`https://r.jina.ai/https://${t}/robots.txt`},
+      {n:"sitemap",link:t=>`https://${t}/sitemap.xml`,api:`https://r.jina.ai/https://${t}/sitemap.xml`},
       {n:"wayback",link:t=>`https://web.archive.org/web/*/${t}/robots.txt`},
       {n:"commoncrawl",link:t=>`https://index.commoncrawl.org/`},
-      {n:"urlscan",link:t=>`https://urlscan.io/search/#${t}`,api:`https://r.jina.ai/https://urlscan.io/api/v1/search/?q=${'${t}'}`}
+      {n:"urlscan",link:t=>`https://urlscan.io/search/#${t}`,api:`https://r.jina.ai/https://urlscan.io/api/v1/search/?q=\${t}`}
     ]},
     {name:"Headers",type:"domain",providers:[
       {n:"sec-headers",link:t=>`https://securityheaders.com/?q=${t}&followRedirects=on`},
-      {n:"raw",link:t=>`https://${t}`,api:`https://r.jina.ai/https://${'${t}'}`},
+      {n:"raw",link:t=>`https://${t}`,api:`https://r.jina.ai/https://${t}`},
       {n:"observatory",link:t=>`https://observatory.mozilla.org/analyze/${t}`},
       {n:"ssllabs",link:t=>`https://www.ssllabs.com/ssltest/analyze.html?d=${t}`},
       {n:"hardenize",link:t=>`https://www.hardenize.com/report/${t}`}
@@ -292,25 +307,25 @@
       {n:"pubwww-key",link:t=>`https://publicwww.com/websites/%22api_key%22%20site:${t}/`},
       {n:"gists",link:t=>`https://gist.github.com/search?q=${t}+key`},
       {n:"grep",link:t=>`https://grep.app/search?q=${t}+token`},
-      {n:"urlscan",link:t=>`https://urlscan.io/search/#${t}`,api:`https://r.jina.ai/https://urlscan.io/api/v1/search/?q=${'${t}'}`}
+      {n:"urlscan",link:t=>`https://urlscan.io/search/#${t}`,api:`https://r.jina.ai/https://urlscan.io/api/v1/search/?q=\${t}`}
     ]},
     {name:"CSP",type:"domain",providers:[
       {n:"csp-eval",link:t=>`https://csp-evaluator.withgoogle.com/`},
       {n:"observatory",link:t=>`https://observatory.mozilla.org/analyze/${t}`},
-      {n:"headers",link:t=>`https://${t}`,api:`https://r.jina.ai/https://${'${t}'}`},
+      {n:"headers",link:t=>`https://${t}`,api:`https://r.jina.ai/https://${t}`},
       {n:"sec-headers",link:t=>`https://securityheaders.com/?q=${t}&followRedirects=on`},
       {n:"report-uri",link:t=>`https://report-uri.com/`}
     ]},
     {name:"Cookies",type:"domain",providers:[
-      {n:"raw",link:t=>`https://${t}`,api:`https://r.jina.ai/https://${'${t}'}`},
+      {n:"raw",link:t=>`https://${t}`,api:`https://r.jina.ai/https://${t}`},
       {n:"wapp",link:t=>`https://www.wappalyzer.com/lookup/${t}`},
       {n:"builtwith",link:t=>`https://builtwith.com/${t}`},
-      {n:"urlscan",link:t=>`https://urlscan.io/search/#${t}`,api:`https://r.jina.ai/https://urlscan.io/api/v1/search/?q=${'${t}'}`},
+      {n:"urlscan",link:t=>`https://urlscan.io/search/#${t}`,api:`https://r.jina.ai/https://urlscan.io/api/v1/search/?q=\${t}`},
       {n:"privacytests",link:t=>`https://privacytests.org/`}
     ]},
     {name:"JS Endpoints",type:"domain",providers:[
       {n:"gau",link:t=>`https://github.com/lc/gau`},
-      {n:"wayback",link:t=>`https://web.archive.org/cdx/search/cdx?url=${t}/*&output=json`,api:`https://r.jina.ai/https://web.archive.org/cdx/search/cdx?url=${'${t}'}/*&output=json`},
+      {n:"wayback",link:t=>`https://web.archive.org/cdx/search/cdx?url=${t}/*&output=json`,api:`https://r.jina.ai/https://web.archive.org/cdx/search/cdx?url=\${t}/*&output=json`},
       {n:"commoncrawl",link:t=>`https://index.commoncrawl.org/`},
       {n:"katana",link:t=>`https://github.com/projectdiscovery/katana`},
       {n:"hakrawler",link:t=>`https://github.com/hakluke/hakrawler`}
@@ -323,9 +338,9 @@
       {n:"shodan",link:t=>`https://www.shodan.io/search?query=${t}`}
     ]},
     {name:"Geo/SSL",type:"ip",providers:[
-      {n:"ipinfo",link:t=>`https://ipinfo.io/${t}`,api:`https://r.jina.ai/https://ipinfo.io/${'${t}'}/json`},
-      {n:"db-ip",link:t=>`https://db-ip.com/${t}`,api:`https://r.jina.ai/https://api.db-ip.com/v2/free/${'${t}'}`},
-      {n:"ctlogs",link:t=>`https://crt.sh/?q=${t}`,api:`https://r.jina.ai/https://crt.sh/?q=${'${t}'}&output=json`},
+      {n:"ipinfo",link:t=>`https://ipinfo.io/${t}`,api:`https://r.jina.ai/https://ipinfo.io/\${t}/json`},
+      {n:"db-ip",link:t=>`https://db-ip.com/${t}`,api:`https://r.jina.ai/https://api.db-ip.com/v2/free/\${t}`},
+      {n:"ctlogs",link:t=>`https://crt.sh/?q=${t}`,api:`https://r.jina.ai/https://crt.sh/?q=\${t}&output=json`},
       {n:"censys",link:t=>`https://search.censys.io/hosts/${t}`},
       {n:"shodan",link:t=>`https://www.shodan.io/host/${t}`}
     ]},
@@ -346,23 +361,23 @@
     {name:"Typos",type:"domain",providers:[
       {n:"twister",link:t=>`https://dnstwister.report/search?q=${t}`},
       {n:"dnsgrep",link:t=>`https://dnsgrep.dnslookup.online/?q=${t}`},
-      {n:"crt.sh",link:t=>`https://crt.sh/?q=${t}`,api:`https://r.jina.ai/https://crt.sh/?q=${'${t}'}&output=json`},
-      {n:"urlscan",link:t=>`https://urlscan.io/search/#${t}`,api:`https://r.jina.ai/https://urlscan.io/api/v1/search/?q=${'${t}'}`},
+      {n:"crt.sh",link:t=>`https://crt.sh/?q=${t}`,api:`https://r.jina.ai/https://crt.sh/?q=\${t}&output=json`},
+      {n:"urlscan",link:t=>`https://urlscan.io/search/#${t}`,api:`https://r.jina.ai/https://urlscan.io/api/v1/search/?q=\${t}`},
       {n:"rapiddns",link:t=>`https://rapiddns.io/subdomain/${t}?full=1`}
     ]},
     {name:"TXT",type:"domain",providers:[
-      {n:"TXT",link:t=>`https://dns.google/resolve?name=${t}&type=TXT`,api:`https://r.jina.ai/https://dns.google/resolve?name=${'${t}'}&type=TXT`},
-      {n:"spf",link:t=>`https://dns.google/resolve?name=${t}&type=TXT`,api:`https://r.jina.ai/https://dns.google/resolve?name=${'${t}'}&type=TXT`},
-      {n:"dmarc",link:t=>`https://dns.google/resolve?name=_dmarc.${t}&type=TXT`,api:`https://r.jina.ai/https://dns.google/resolve?name=_dmarc.${'${t}'}&type=TXT`},
-      {n:"mta-sts",link:t=>`https://dns.google/resolve?name=mta-sts.${t}&type=TXT`,api:`https://r.jina.ai/https://dns.google/resolve?name=mta-sts.${'${t}'}&type=TXT`},
-      {n:"bimi",link:t=>`https://dns.google/resolve?name=default._bimi.${t}&type=TXT`,api:`https://r.jina.ai/https://dns.google/resolve?name=default._bimi.${'${t}'}&type=TXT`}
+      {n:"TXT",link:t=>`https://dns.google/resolve?name=${t}&type=TXT`,api:`https://r.jina.ai/https://dns.google/resolve?name=\${t}&type=TXT`},
+      {n:"spf",link:t=>`https://dns.google/resolve?name=${t}&type=TXT`,api:`https://r.jina.ai/https://dns.google/resolve?name=\${t}&type=TXT`},
+      {n:"dmarc",link:t=>`https://dns.google/resolve?name=_dmarc.${t}&type=TXT`,api:`https://r.jina.ai/https://dns.google/resolve?name=_dmarc.\${t}&type=TXT`},
+      {n:"mta-sts",link:t=>`https://dns.google/resolve?name=mta-sts.${t}&type=TXT`,api:`https://r.jina.ai/https://dns.google/resolve?name=mta-sts.\${t}&type=TXT`},
+      {n:"bimi",link:t=>`https://dns.google/resolve?name=default._bimi.${t}&type=TXT`,api:`https://r.jina.ai/https://dns.google/resolve?name=default._bimi.\${t}&type=TXT`}
     ]},
     {name:"Policies",type:"domain",providers:[
-      {n:"security.txt",link:t=>`https://${t}/.well-known/security.txt`,api:`https://r.jina.ai/https://${'${t}'}/.well-known/security.txt`},
-      {n:"humans.txt",link:t=>`https://${t}/humans.txt`,api:`https://r.jina.ai/https://${'${t}'}/humans.txt`},
-      {n:"ads.txt",link:t=>`https://${t}/ads.txt`,api:`https://r.jina.ai/https://${'${t}'}/ads.txt`},
-      {n:"app-ads.txt",link:t=>`https://${t}/app-ads.txt`,api:`https://r.jina.ai/https://${'${t}'}/app-ads.txt`},
-      {n:"well-known",link:t=>`https://${t}/.well-known/`,api:`https://r.jina.ai/https://${'${t}'}/.well-known/`}
+      {n:"security.txt",link:t=>`https://${t}/.well-known/security.txt`,api:`https://r.jina.ai/https://${t}/.well-known/security.txt`},
+      {n:"humans.txt",link:t=>`https://${t}/humans.txt`,api:`https://r.jina.ai/https://${t}/humans.txt`},
+      {n:"ads.txt",link:t=>`https://${t}/ads.txt`,api:`https://r.jina.ai/https://${t}/ads.txt`},
+      {n:"app-ads.txt",link:t=>`https://${t}/app-ads.txt`,api:`https://r.jina.ai/https://${t}/app-ads.txt`},
+      {n:"well-known",link:t=>`https://${t}/.well-known/`,api:`https://r.jina.ai/https://${t}/.well-known/`}
     ]},
     {name:"CDN Use",type:"domain",providers:[
       {n:"cdnjs",link:t=>`https://publicwww.com/websites/cdnjs%20site:${t}/`},
@@ -373,35 +388,41 @@
     ]},
     {name:"Login",type:"domain",providers:[
       {n:"wayback",link:t=>`https://web.archive.org/web/*/${t}/*login*`},
-      {n:"urlscan",link:t=>`https://urlscan.io/search/#${t}+login`,api:`https://r.jina.ai/https://urlscan.io/api/v1/search/?q=${'${t}'}+login`},
+      {n:"urlscan",link:t=>`https://urlscan.io/search/#${t}+login`,api:`https://r.jina.ai/https://urlscan.io/api/v1/search/?q=\${t}+login`},
       {n:"publicwww",link:t=>`https://publicwww.com/websites/%22login%22%20site:${t}/`},
       {n:"grep",link:t=>`https://grep.app/search?q=${t}+login`},
       {n:"github",link:t=>`https://github.com/search?q=${t}+login`}
     ]},
     {name:"Forms",type:"domain",providers:[
-      {n:"live",link:t=>`https://${t}`,api:`https://r.jina.ai/https://${'${t}'}`},
+      {n:"live",link:t=>`https://${t}`,api:`https://r.jina.ai/https://${t}`},
       {n:"wayback",link:t=>`https://web.archive.org/web/*/${t}/*form*`},
-      {n:"urlscan",link:t=>`https://urlscan.io/search/#${t}+form`,api:`https://r.jina.ai/https://urlscan.io/api/v1/search/?q=${'${t}'}+form`},
+      {n:"urlscan",link:t=>`https://urlscan.io/search/#${t}+form`,api:`https://r.jina.ai/https://urlscan.io/api/v1/search/?q=\${t}+form`},
       {n:"grep",link:t=>`https://grep.app/search?q=${t}+form`},
       {n:"publicwww",link:t=>`https://publicwww.com/websites/%22form%22%20site:${t}/`}
     ]},
     {name:"IPs Seen",type:"domain",providers:[
-      {n:"urlscan",link:t=>`https://urlscan.io/search/#${t}`,api:`https://r.jina.ai/https://urlscan.io/api/v1/search/?q=${'${t}'}`},
+      {n:"urlscan",link:t=>`https://urlscan.io/search/#${t}`,api:`https://r.jina.ai/https://urlscan.io/api/v1/search/?q=\${t}`},
       {n:"threatcrowd",link:t=>`https://www.threatcrowd.org/domain.php?domain=${t}`},
       {n:"viewdns",link:t=>`https://viewdns.info/iphistory/?domain=${t}`},
       {n:"securitytrails",link:t=>`https://securitytrails.com/domain/${t}/history/a`},
       {n:"robtex",link:t=>`https://www.robtex.com/dns-lookup/${t}`}
     ]},
     {name:"HTML Meta",type:"domain",providers:[
-      {n:"fetch",link:t=>`https://${t}`,api:`https://r.jina.ai/https://${'${t}'}`},
+      {n:"fetch",link:t=>`https://${t}`,api:`https://r.jina.ai/https://${t}`},
       {n:"wayback",link:t=>`https://web.archive.org/web/*/${t}`},
       {n:"headers",link:t=>`https://securityheaders.com/?q=${t}`},
       {n:"builtwith",link:t=>`https://builtwith.com/${t}`},
       {n:"wapp",link:t=>`https://www.wappalyzer.com/lookup/${t}`}
     ]}
-  ];
+  ]; // end TOOLS
 
-  const allowed=(tool,t)=> tool.type==='any'||(tool.type==='domain'&&!isIP(t))||(tool.type==='ip'&&isIP(t));
+  const allowed=(tool,t,scope,showAll)=> {
+    if (showAll) return true;
+    if (scope==='domain') return tool.type==='domain' || tool.type==='any';
+    if (scope==='ip') return tool.type==='ip' || tool.type==='any';
+    // auto
+    return tool.type==='any'||(tool.type==='domain'&&!isIP(t))||(tool.type==='ip'&&isIP(t));
+  };
 
   const makeCard=(tool,target)=>{
     const tpl=document.getElementById('cardTpl').content.cloneNode(true);
@@ -414,13 +435,14 @@
     (async()=>{
       for(const p of tool.providers){
         const li=line('load',p.n,p.link(target));
-        list.appendChild(li); await sleep(25);
+        list.appendChild(li); await sleep(20);
         if(p.api){
           try{
-            const res=await fetchWithTimeout(p.api.replaceAll('${t}',encodeURIComponent(target)),9000);
+            const url=p.api.replaceAll('${t}',encodeURIComponent(target));
+            const res=await fetch(url);
             if(res.ok){
               const text=await res.text();
-              const good=!!text && text.length>2 && !/not\\s*found|forbidden|denied|error/i.test(text);
+              const good=!!text && text.length>2 && !/not\s*found|forbidden|denied|error/i.test(text);
               const repl=line(good?'ok':'err',p.n,p.link(target),good?'ok':'no');
               li.replaceWith(repl);
             }else{
@@ -438,11 +460,19 @@
     return root;
   };
 
+  let currentScope='auto';
+
+  function setActiveTab(scope){
+    currentScope=scope;
+    document.querySelectorAll('.tab').forEach(b=>b.classList.toggle('active', b.dataset.scope===scope));
+  }
+
   async function run(){
     const t=trim($('target').value||'');
     if(!t) return;
+    const showAll=$('showAll').checked;
     const grid=$('results'); grid.innerHTML='';
-    const used=TOOLS.filter(tool=>allowed(tool,t));
+    const used=TOOLS.filter(tool=>allowed(tool,t,currentScope,showAll));
     for(const tool of used) grid.appendChild(makeCard(tool,t));
   }
 
@@ -453,7 +483,7 @@
     const cards=[...document.querySelectorAll('.card')].map(c=>{
       const tool=c.querySelector('h3')?.textContent||'';
       const items=[...c.querySelectorAll('li')].map(li=>{
-        const provider=li.querySelector('span')?.textContent?.replace(/:\\s*$/,'')||'';
+        const provider=li.querySelector('span')?.textContent?.replace(/:\s*$/,'')||'';
         const url=li.querySelector('a')?.href||'';
         const ok=li.querySelector('.ok')? 'ok' : li.querySelector('.err')? 'err' : 'load';
         return {provider,url,status:ok};
@@ -463,6 +493,10 @@
     const blob=new Blob([JSON.stringify({target:$('target').value,ts:Date.now(),cards},null,2)],{type:'application/json'});
     const url=URL.createObjectURL(blob); const a=document.createElement('a'); a.href=url; a.download='osint-export.json'; a.click(); URL.revokeObjectURL(url);
   });
+
+  document.querySelectorAll('.tab').forEach(btn=>{
+    btn.addEventListener('click',()=>{ setActiveTab(btn.dataset.scope); });
+  });
 </script>
-</body>
+<div style='position:fixed;right:10px;bottom:10px;font:11px ui-monospace;color:#8fb;opacity:.8'>OSINT Pro · build-20251010-143018</div></body>
 </html>
