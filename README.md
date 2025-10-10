@@ -3,7 +3,7 @@
 This version supports **brand-only scans** (TLD sweep) and **download as JSON/CSV**. It works entirely on GitHub Pages using only free, no-login sources.
 
 ## Features
-- Brand TLD sweep (e.g., `dell.in`, `dell.ru`, `dell.xyz`, … across ~60 popular TLDs)
+- Brand TLD sweep (e.g., `.in`, `.ru`, `.xyz`, … across ~60 popular TLDs)
 - Domain RDAP / WHOIS, DNS (A/AAAA/MX/NS/TXT), SPF/DMARC
 - GeoIP/ASN/ISP for first A record (ipwho.is)
 - Certificate Transparency (crt.sh) lookalike harvesting
