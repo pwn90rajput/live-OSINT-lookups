@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>OSINT Recon Dashboard</title>
+  <title>OSINT Recon Dashboard — Pro</title>
   <!-- Tailwind CSS CDN -->
   <script src="https://cdn.tailwindcss.com"></script>
   <style>
@@ -11,20 +11,19 @@
     body { background: #0b0f10; font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace; }
     .neon { text-shadow: 0 0 10px rgba(0,255,170,.3), 0 0 25px rgba(0,255,170,.15); }
     .panel { background: #0f1619; border: 1px solid #17343b; box-shadow: inset 0 0 0 1px #0b2a2e; }
-    .divider { height:1px; background:linear-gradient(90deg, transparent, #1b3f46, transparent); }
     .spinner { width: 18px; height: 18px; border: 3px solid #16343a; border-top-color: #29f7c4; border-radius: 50%; animation: spin 1s linear infinite; }
     @keyframes spin { to { transform: rotate(360deg); } }
-    .badge { background:#0d2326; border:1px solid #1f4b53; padding:.15rem .45rem; border-radius:.35rem; }
     a.link { color:#7dece0; }
     a.link:hover { text-decoration: underline; }
     code.k { background:#0b1216; border:1px solid #234; border-bottom-width:3px; border-right-width:3px; padding:.1rem .35rem; border-radius:.35rem; }
+    .grid-auto { display:grid; grid-template-columns: repeat(auto-fit,minmax(280px,1fr)); gap:1rem; }
   </style>
 </head>
 <body class="text-slate-200">
   <header class="px-4 py-5 md:px-8 sticky top-0 z-10 backdrop-blur bg-black/40 border-b border-teal-900/40">
     <div class="flex items-center justify-between gap-4">
-      <h1 class="text-xl md:text-2xl font-semibold text-teal-300 neon">OSINT Recon Dashboard</h1>
-      <div class="text-xs md:text-sm text-teal-400">Passive lookups for authorized testing</div>
+      <h1 class="text-xl md:text-2xl font-semibold text-teal-300 neon">OSINT Recon Dashboard — Pro</h1>
+      <div class="text-xs md:text-sm text-teal-400">Passive lookups only • client‑side</div>
     </div>
   </header>
 
@@ -45,7 +44,7 @@
     </section>
 
     <!-- Results Grid -->
-    <section class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4">
+    <section class="grid-auto">
       <!-- Host & DNS -->
       <div class="panel rounded-2xl p-4">
         <div class="flex items-center justify-between mb-2">
@@ -55,13 +54,32 @@
         <div id="hostInfo" class="text-sm space-y-2 text-slate-300"></div>
       </div>
 
-      <!-- Hosting / ASN -->
+      <!-- DNS Records -->
       <div class="panel rounded-2xl p-4">
         <div class="flex items-center justify-between mb-2">
-          <h3 class="text-teal-300">Hosting / ASN</h3>
+          <h3 class="text-teal-300">DNS Records</h3>
+          <div id="dnsLoader" class="hidden spinner"></div>
+        </div>
+        <div id="dnsInfo" class="text-sm space-y-2 text-slate-300"></div>
+      </div>
+
+      <!-- Hosting / ASN & Reputation -->
+      <div class="panel rounded-2xl p-4">
+        <div class="flex items-center justify-between mb-2">
+          <h3 class="text-teal-300">Hosting / ASN & Reputation</h3>
           <div id="asnLoader" class="hidden spinner"></div>
         </div>
         <div id="asnInfo" class="text-sm space-y-2 text-slate-300"></div>
+        <div id="repInfo" class="text-xs text-slate-300 mt-2"></div>
+      </div>
+
+      <!-- BGP / Prefix -->
+      <div class="panel rounded-2xl p-4">
+        <div class="flex items-center justify-between mb-2">
+          <h3 class="text-teal-300">BGP / Prefix</h3>
+          <div id="bgpLoader" class="hidden spinner"></div>
+        </div>
+        <div id="bgpInfo" class="text-sm space-y-2 text-slate-300"></div>
       </div>
 
       <!-- SSL/TLS -->
@@ -70,33 +88,114 @@
           <h3 class="text-teal-300">SSL/TLS</h3>
           <div id="sslLoader" class="hidden spinner"></div>
         </div>
-        <div class="text-xs text-slate-400 mb-2">Uses SSL Labs API; queues new analyses and polls until ready.</div>
+        <div class="text-xs text-slate-400 mb-2">SSL Labs API; may queue and take time.</div>
         <div id="sslInfo" class="text-sm space-y-2 text-slate-300"></div>
       </div>
 
-      <!-- Open Ports -->
+      <!-- Certificate Transparency (crt.sh) -->
+      <div class="panel rounded-2xl p-4">
+        <div class="flex items-center justify-between mb-2">
+          <h3 class="text-teal-300">Certificate Transparency</h3>
+          <div id="ctLoader" class="hidden spinner"></div>
+        </div>
+        <div id="ctInfo" class="text-sm space-y-2 text-slate-300"></div>
+      </div>
+
+      <!-- Open Ports (Passive) -->
       <div class="panel rounded-2xl p-4">
         <div class="flex items-center justify-between mb-2">
           <h3 class="text-teal-300">Open Ports (Passive)</h3>
           <div id="portsLoader" class="hidden spinner"></div>
         </div>
         <div id="portsInfo" class="text-sm space-y-2 text-slate-300"></div>
-        <div class="text-[11px] text-slate-500 mt-2">Data from Shodan InternetDB (no key). Shows last-seen ports; not an active scan.</div>
+        <div class="text-[11px] text-slate-500 mt-2">Shodan InternetDB (no API key). Last-seen only; not an active scan.</div>
       </div>
 
       <!-- WHOIS / RDAP -->
-      <div class="panel rounded-2xl p-4 md:col-span-2 xl:col-span-2">
+      <div class="panel rounded-2xl p-4">
         <div class="flex items-center justify-between mb-2">
           <h3 class="text-teal-300">WHOIS / RDAP</h3>
           <div id="whoisLoader" class="hidden spinner"></div>
         </div>
         <div id="whoisInfo" class="text-sm space-y-2 text-slate-300"></div>
       </div>
+
+      <!-- HSTS Preload -->
+      <div class="panel rounded-2xl p-4">
+        <div class="flex items-center justify-between mb-2">
+          <h3 class="text-teal-300">HSTS Preload</h3>
+          <div id="hstsLoader" class="hidden spinner"></div>
+        </div>
+        <div id="hstsInfo" class="text-sm space-y-2 text-slate-300"></div>
+      </div>
+
+      <!-- Security.txt -->
+      <div class="panel rounded-2xl p-4">
+        <div class="flex items-center justify-between mb-2">
+          <h3 class="text-teal-300">Security Contact (security.txt)</h3>
+          <div id="secTxtLoader" class="hidden spinner"></div>
+        </div>
+        <div id="secTxtInfo" class="text-sm space-y-2 text-slate-300"></div>
+      </div>
+
+      <!-- robots.txt -->
+      <div class="panel rounded-2xl p-4">
+        <div class="flex items-center justify-between mb-2">
+          <h3 class="text-teal-300">robots.txt</h3>
+          <div id="robotsLoader" class="hidden spinner"></div>
+        </div>
+        <div id="robotsInfo" class="text-sm space-y-2 text-slate-300"></div>
+      </div>
+
+      <!-- URLScan Findings -->
+      <div class="panel rounded-2xl p-4">
+        <div class="flex items-center justify-between mb-2">
+          <h3 class="text-teal-300">urlscan.io</h3>
+          <div id="urlscanLoader" class="hidden spinner"></div>
+        </div>
+        <div id="urlscanInfo" class="text-sm space-y-2 text-slate-300"></div>
+      </div>
+
+      <!-- Wayback Machine -->
+      <div class="panel rounded-2xl p-4">
+        <div class="flex items-center justify-between mb-2">
+          <h3 class="text-teal-300">Wayback Snapshots</h3>
+          <div id="wbLoader" class="hidden spinner"></div>
+        </div>
+        <div id="wbInfo" class="text-sm space-y-2 text-slate-300"></div>
+      </div>
+
+      <!-- Favicon Hash (Shodan pivot) -->
+      <div class="panel rounded-2xl p-4">
+        <div class="flex items-center justify-between mb-2">
+          <h3 class="text-teal-300">Favicon Hash (Shodan pivot)</h3>
+          <div id="favLoader" class="hidden spinner"></div>
+        </div>
+        <div id="favInfo" class="text-sm space-y-2 text-slate-300"></div>
+      </div>
+
+      <!-- HTML Tech Hints -->
+      <div class="panel rounded-2xl p-4">
+        <div class="flex items-center justify-between mb-2">
+          <h3 class="text-teal-300">HTML Tech Hints</h3>
+          <div id="techLoader" class="hidden spinner"></div>
+        </div>
+        <div id="techInfo" class="text-sm space-y-2 text-slate-300"></div>
+      </div>
+
+      <!-- Social OSINT / Disclosure -->
+      <div class="panel rounded-2xl p-4">
+        <div class="flex items-center justify-between mb-2">
+          <h3 class="text-teal-300">Social OSINT & Disclosure</h3>
+          <div id="socLoader" class="hidden spinner"></div>
+        </div>
+        <div id="socInfo" class="text-sm space-y-2 text-slate-300"></div>
+      </div>
     </section>
 
     <section class="text-xs text-slate-500 leading-relaxed">
-      <p><strong>Legal:</strong> For assets you own or are explicitly authorized to test. This dashboard performs passive/API lookups over HTTPS; it does not actively scan targets.</p>
-      <p>APIs used: DNS over HTTPS (Google), IP Intel (ipwho.is), SSL Labs, RDAP (rdap.org), Shodan InternetDB.</p>
+      <p><strong>Legal:</strong> Use only on assets you own or are explicitly authorized to test. This dashboard performs passive/API lookups over HTTPS; it does not actively scan targets.</p>
+      <p>APIs used: Google DoH, ipwho.is, RDAP (rdap.org), Shodan InternetDB, SSL Labs, crt.sh, urlscan.io, Internet Archive CDX, HSTS preload, BGPView, r.jina.ai fetch proxy.</p>
     </section>
   </main>
 
@@ -106,258 +205,218 @@
       target: document.getElementById('target'),
       scanBtn: document.getElementById('scanBtn'),
       resetBtn: document.getElementById('resetBtn'),
+      // loaders
       hostLoader: document.getElementById('hostLoader'),
+      dnsLoader: document.getElementById('dnsLoader'),
       asnLoader: document.getElementById('asnLoader'),
+      bgpLoader: document.getElementById('bgpLoader'),
       sslLoader: document.getElementById('sslLoader'),
+      ctLoader: document.getElementById('ctLoader'),
       portsLoader: document.getElementById('portsLoader'),
       whoisLoader: document.getElementById('whoisLoader'),
+      hstsLoader: document.getElementById('hstsLoader'),
+      secTxtLoader: document.getElementById('secTxtLoader'),
+      robotsLoader: document.getElementById('robotsLoader'),
+      urlscanLoader: document.getElementById('urlscanLoader'),
+      wbLoader: document.getElementById('wbLoader'),
+      favLoader: document.getElementById('favLoader'),
+      techLoader: document.getElementById('techLoader'),
+      socLoader: document.getElementById('socLoader'),
+      // info blocks
       hostInfo: document.getElementById('hostInfo'),
+      dnsInfo: document.getElementById('dnsInfo'),
       asnInfo: document.getElementById('asnInfo'),
+      repInfo: document.getElementById('repInfo'),
+      bgpInfo: document.getElementById('bgpInfo'),
       sslInfo: document.getElementById('sslInfo'),
+      ctInfo: document.getElementById('ctInfo'),
       portsInfo: document.getElementById('portsInfo'),
       whoisInfo: document.getElementById('whoisInfo'),
+      hstsInfo: document.getElementById('hstsInfo'),
+      secTxtInfo: document.getElementById('secTxtInfo'),
+      robotsInfo: document.getElementById('robotsInfo'),
+      urlscanInfo: document.getElementById('urlscanInfo'),
+      wbInfo: document.getElementById('wbInfo'),
+      favInfo: document.getElementById('favInfo'),
+      techInfo: document.getElementById('techInfo'),
+      socInfo: document.getElementById('socInfo'),
     };
 
     const sleep = (ms) => new Promise(r => setTimeout(r, ms));
     const isIP = (v) => /^(\d{1,3}\.){3}\d{1,3}$/.test(v) || /:/.test(v);
     const strip = (s='') => s.trim().replace(/^https?:\/\//i, '').replace(/\/$/, '');
+    const esc = (s='') => s.replace(/[&<>\"]/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;"}[c]));
 
-    function setLoading(loader, on) { loader.classList.toggle('hidden', !on); }
-    function clearPanels(){ els.hostInfo.innerHTML = els.asnInfo.innerHTML = els.sslInfo.innerHTML = els.portsInfo.innerHTML = els.whoisInfo.innerHTML = ''; }
-    function li(k, v) { return `<div><span class="text-slate-400">${k}:</span> <span class="text-slate-200">${v ?? '-'}</span></div>`; }
-    function pre(obj) { return `<pre class="text-xs bg-black/30 border border-slate-700/40 rounded p-2 overflow-x-auto">${escapeHtml(JSON.stringify(obj, null, 2))}<\/pre>`; }
-    function escapeHtml(s){ return s.replace(/[&<>\"]/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;"}[c])); }
+    function setLoading(loader, on){ if(loader) loader.classList.toggle('hidden', !on); }
+    function clearPanels(){ Object.values({
+      a:els.hostInfo,b:els.dnsInfo,c:els.asnInfo,d:els.repInfo,e:els.bgpInfo,f:els.sslInfo,g:els.ctInfo,h:els.portsInfo,i:els.whoisInfo,j:els.hstsInfo,k:els.secTxtInfo,l:els.robotsInfo,m:els.urlscanInfo,n:els.wbInfo,o:els.favInfo,p:els.techInfo,q:els.socInfo
+    }).forEach(el=>{ if(el) el.innerHTML=''; }); }
+    function li(k,v){ return `<div><span class="text-slate-400">${k}:</span> <span class="text-slate-200">${v ?? '-'}</span></div>`; }
 
-    // --------------------- DNS Resolve (Google DoH) ---------------------
-    async function resolveA(host) {
-      const url = `https://dns.google/resolve?name=${encodeURIComponent(host)}&type=A`;
-      const r = await fetch(url, { cache: 'no-store' });
-      if (!r.ok) throw new Error('DNS resolve failed');
-      const j = await r.json();
-      const answers = (j.Answer || []).filter(a => a.type === 1);
-      return answers.map(a => a.data);
-    }
-
-    // --------------------- Hosting/ASN (ipwho.is) ---------------------
-    async function getIpIntel(ip) {
-      const r = await fetch(`https://ipwho.is/${encodeURIComponent(ip)}`);
-      if (!r.ok) throw new Error('ipwho.is failed');
-      const j = await r.json();
-      if (j.success === false) throw new Error(j.message || 'ipwho.is error');
-      return j;
-    }
-
-    // --------------------- Ports (Shodan InternetDB) ---------------------
-    async function getOpenPorts(ip) {
-      const r = await fetch(`https://internetdb.shodan.io/${encodeURIComponent(ip)}`);
-      if (!r.ok) throw new Error('InternetDB failed');
+    // DNS over HTTPS
+    async function doh(host, type){
+      const r = await fetch(`https://dns.google/resolve?name=${encodeURIComponent(host)}&type=${type}`, { cache:'no-store' });
+      if(!r.ok) throw new Error('DoH failed');
       return await r.json();
     }
+    async function resolveA(host){ const j = await doh(host, 'A'); const ans=(j.Answer||[]).filter(a=>a.type===1); return ans.map(a=>a.data); }
 
-    // --------------------- WHOIS / RDAP ---------------------
-    async function getRdapDomain(domain) {
-      const r = await fetch(`https://rdap.org/domain/${encodeURIComponent(domain)}`);
-      if (!r.ok) throw new Error('RDAP domain failed');
-      return await r.json();
-    }
-    async function getRdapIP(ip) {
-      const r = await fetch(`https://rdap.org/ip/${encodeURIComponent(ip)}`);
-      if (!r.ok) throw new Error('RDAP ip failed');
-      return await r.json();
+    // IP Intel
+    async function getIpIntel(ip){
+      const r = await fetch(`https://ipwho.is/${encodeURIComponent(ip)}?security=1`);
+      if(!r.ok) throw new Error('ipwho.is failed');
+      const j = await r.json(); if(j.success===false) throw new Error(j.message||'ipwho.is error'); return j;
     }
 
-    // --------------------- SSL Labs ---------------------
-    async function getSslAnalysis(host) {
-      // Start or fetch existing analysis
-      let endpoint = `https://api.ssllabs.com/api/v3/analyze?host=${encodeURIComponent(host)}&all=done&fromCache=on`;
-      let r = await fetch(endpoint);
-      if (!r.ok) throw new Error('SSL Labs analyze failed');
+    // Shodan InternetDB
+    async function getOpenPorts(ip){ const r = await fetch(`https://internetdb.shodan.io/${encodeURIComponent(ip)}`); if(!r.ok) throw new Error('InternetDB failed'); return await r.json(); }
+
+    // RDAP
+    async function getRdapDomain(d){ const r = await fetch(`https://rdap.org/domain/${encodeURIComponent(d)}`); if(!r.ok) throw new Error('RDAP domain failed'); return await r.json(); }
+    async function getRdapIP(ip){ const r = await fetch(`https://rdap.org/ip/${encodeURIComponent(ip)}`); if(!r.ok) throw new Error('RDAP ip failed'); return await r.json(); }
+
+    // SSL Labs
+    async function getSslAnalysis(host){
+      let r = await fetch(`https://api.ssllabs.com/api/v3/analyze?host=${encodeURIComponent(host)}&all=done&fromCache=on`);
+      if(!r.ok) throw new Error('SSL Labs failed');
       let j = await r.json();
-
-      // If not ready, queue new and poll
-      if (!j.status || (j.status !== 'READY' && j.status !== 'ERROR')) {
-        // queue a new assessment
+      if(!j.status || (j.status!=='READY' && j.status!=='ERROR')){
         await fetch(`https://api.ssllabs.com/api/v3/analyze?host=${encodeURIComponent(host)}&publish=off&all=done&startNew=on`);
-        for (let i = 0; i < 20; i++) { // up to ~100s
-          await sleep(5000);
-          r = await fetch(`https://api.ssllabs.com/api/v3/analyze?host=${encodeURIComponent(host)}&all=done`);
-          if (!r.ok) break;
-          j = await r.json();
-          if (j.status === 'READY' || j.status === 'ERROR') break;
-        }
+        for(let i=0;i<20;i++){ await sleep(5000); r = await fetch(`https://api.ssllabs.com/api/v3/analyze?host=${encodeURIComponent(host)}&all=done`); if(!r.ok) break; j = await r.json(); if(j.status==='READY'||j.status==='ERROR') break; }
       }
       return j;
     }
 
-    // --------------------- Renderers ---------------------
-    function renderHost(host, ips) {
-      els.hostInfo.innerHTML = [
-        li('Host', host),
-        li('Resolved A', ips && ips.length ? ips.join(', ') : '—'),
-      ].join('');
+    // CT (crt.sh) via read proxy
+    async function getCT(domain){
+      const url = `https://r.jina.ai/https://crt.sh/?q=%25.${encodeURIComponent(domain)}&output=json`;
+      const r = await fetch(url, { cache:'no-store' }); if(!r.ok) throw new Error('crt.sh failed');
+      const txt = await r.text(); let json; try{ json = JSON.parse(txt); } catch{ json = txt.trim().split('\n').map(line=>JSON.parse(line)); }
+      return Array.isArray(json)? json: [];
     }
 
-    function renderASN(j) {
-      const parts = [];
-      parts.push(li('IP', j.ip));
-      parts.push(li('Org/ASN', `${j.connection?.org || '-'} / AS${j.connection?.asn || '-'}`));
-      parts.push(li('Country/City', `${j.country || '-'} / ${j.city || '-'}`));
-      parts.push(li('ISP', j.connection?.isp || '-'));
-      parts.push(li('Latitude/Longitude', `${j.latitude ?? '-'}, ${j.longitude ?? '-'}`));
-      els.asnInfo.innerHTML = parts.join('');
+    // urlscan.io
+    async function getUrlscan(domain){ const r = await fetch(`https://urlscan.io/api/v1/search/?q=domain:${encodeURIComponent(domain)}`); if(!r.ok) throw new Error('urlscan failed'); return await r.json(); }
+
+    // Wayback Machine (CDX API)
+    async function getWayback(domain){
+      let r = await fetch(`https://web.archive.org/cdx/search/cdx?url=${encodeURIComponent(domain)}/*&output=json&limit=10&filter=statuscode:200&collapse=digest`);
+      if(!r.ok){ r = await fetch(`https://r.jina.ai/https://web.archive.org/cdx/search/cdx?url=${encodeURIComponent(domain)}/*&output=json&limit=10&filter=statuscode:200&collapse=digest`); }
+      if(!r.ok) throw new Error('wayback failed');
+      return await r.json();
     }
 
-    function renderPorts(j) {
-      if (!j || (!j.ports && !j.data && !j.services)) {
-        els.portsInfo.innerHTML = 'No recent port data available.';
-        return;
-      }
-      const ports = j.ports || [];
-      const vulns = j.vulns ? Object.keys(j.vulns) : [];
-      let html = '';
-      html += li('Open Ports', ports.length ? ports.join(', ') : '—');
-      if (j.cpes && Object.keys(j.cpes).length) {
-        const rows = Object.entries(j.cpes).map(([port, arr]) => `<tr><td class="px-2 py-1 border border-slate-700/50">${port}</td><td class="px-2 py-1 border border-slate-700/50">${arr.join('<br/>')}</td></tr>`).join('');
-        html += `<div class="mt-2"><div class="text-slate-400 mb-1">CPEs (services/versions)</div><table class="w-full text-xs border border-slate-700/50">${rows}</table></div>`;
-      }
-      if (vulns.length) {
-        html += `<div class="mt-2 text-xs"><span class="text-slate-400">Vulns:</span> ${vulns.join(', ')}</div>`;
-      }
-      els.portsInfo.innerHTML = html;
+    // BGPView
+    async function getBGP(ip){ const r = await fetch(`https://api.bgpview.io/ip/${encodeURIComponent(ip)}`); if(!r.ok) throw new Error('bgpview failed'); return await r.json(); }
+
+    // security.txt & robots.txt
+    async function getSecurityTxt(host){ for(const u of [`https://${host}/.well-known/security.txt`,`https://${host}/security.txt`]){ const r = await fetch(u, { cache:'no-store' }); if(r.ok) return {url:u,text:await r.text()}; } throw new Error('no security.txt'); }
+    async function getRobots(host){ const r = await fetch(`https://${host}/robots.txt`, { cache:'no-store' }); if(!r.ok) throw new Error('no robots'); return await r.text(); }
+
+    // HSTS preload
+    async function getHSTS(host){ const r = await fetch(`https://hstspreload.org/api/v2/status?domain=${encodeURIComponent(host)}`); if(!r.ok) throw new Error('hsts failed'); return await r.json(); }
+
+    // Favicon hash (mmh3 over base64 of favicon)
+    function mmh3(str, seed=0){ let h1=seed, k1=0; const c1=0xcc9e2d51, c2=0x1b873593; let i=0; for(let bytes=str.length- (str.length%4); i<bytes; ){ k1 = (str.charCodeAt(i++)&0xff) | ((str.charCodeAt(i++)&0xff)<<8) | ((str.charCodeAt(i++)&0xff)<<16) | ((str.charCodeAt(i++)&0xff)<<24); k1 = Math.imul(k1,c1); k1 = (k1<<15)|(k1>>>17); k1 = Math.imul(k1,c2); h1 ^= k1; h1 = (h1<<13)|(h1>>>19); h1 = Math.imul(h1,5) + 0xe6546b64; } k1=0; switch(str.length%4){ case 3: k1 ^= (str.charCodeAt(i+2)&0xff)<<16; case 2: k1 ^= (str.charCodeAt(i+1)&0xff)<<8; case 1: k1 ^= (str.charCodeAt(i)&0xff); k1 = Math.imul(k1,c1); k1 = (k1<<15)|(k1>>>17); k1 = Math.imul(k1,c2); h1 ^= k1; } h1 ^= str.length; h1 ^= h1>>>16; h1 = Math.imul(h1,0x85ebca6b); h1 ^= h1>>>13; h1 = Math.imul(h1,0xc2b2ae35); h1 ^= h1>>>16; return h1|0; }
+    function bytesToB64(buf){ const bytes = new Uint8Array(buf); let bin=''; for(let i=0;i<bytes.length;i++) bin+=String.fromCharCode(bytes[i]); return btoa(bin); }
+    async function getFaviconHash(host){ const r = await fetch(`https://r.jina.ai/https://${host}/favicon.ico`); if(!r.ok) throw new Error('no favicon'); const buf = await r.arrayBuffer(); const b64 = bytesToB64(buf); const hash = mmh3(b64); return {hash,b64len:b64.length}; }
+
+    // HTML fetch (via read proxy) + simple tech hints
+    async function getHTML(host){ const r = await fetch(`https://r.jina.ai/https://${host}/`); if(!r.ok) throw new Error('html fetch failed'); return await r.text(); }
+    function sniffTech(html){
+      const hints=[]; const L=html.toLowerCase();
+      const gen = /<meta[^>]+name=["']generator["'][^>]+content=["']([^"']+)/i.exec(html); if(gen) hints.push(`Generator: ${esc(gen[1])}`);
+      if(/wp-content\//i.test(L) || /wordpress/i.test(L)) hints.push('CMS: WordPress (heuristic)');
+      if(/drupal\.settings/i.test(L)) hints.push('CMS: Drupal (heuristic)');
+      if(/joomla!/i.test(L)) hints.push('CMS: Joomla (heuristic)');
+      if(/shopify/i.test(L)) hints.push('E‑com: Shopify (heuristic)');
+      if(/Magento/i.test(html)) hints.push('E‑com: Magento (heuristic)');
+      if(/cloudflare/i.test(L)) hints.push('CDN/WAF: Cloudflare (content mention)');
+      const libs=[]; (html.match(/<script[^>]+src=["']([^"']+)["']/gi)||[]).slice(0,20).forEach(s=>{ const m=/src=["']([^"']+)/i.exec(s); if(m) libs.push(m[1]); });
+      return {hints, libs};
     }
 
-    function renderWHOIS(j) {
-      if (!j) { els.whoisInfo.innerHTML = 'No RDAP data.'; return; }
-      const h = [];
-      if (j.ldhName) h.push(li('Domain', j.ldhName));
-      if (j.startAddress || j.handle) h.push(li('Handle/Start', `${j.handle || '-'} / ${j.startAddress || '-'}`));
-      if (j.name) h.push(li('Name', j.name));
-      if (Array.isArray(j.status)) h.push(li('Status', j.status.join(', ')));
-      if (j.events) {
-        const created = j.events.find(e=>e.eventAction==='registration')?.eventDate;
-        const expires = j.events.find(e=>e.eventAction==='expiration')?.eventDate;
-        const updated = j.events.find(e=>e.eventAction==='last changed')?.eventDate || j.events.find(e=>e.eventAction==='last update of RDAP database')?.eventDate;
-        if (created) h.push(li('Created', new Date(created).toLocaleString()));
-        if (updated) h.push(li('Updated', new Date(updated).toLocaleString()));
-        if (expires) h.push(li('Expires', new Date(expires).toLocaleString()));
-      }
-      if (j.entities && j.entities.length) {
-        const ents = j.entities.map(e=>`${e.roles?.join('/') || 'entity'}: ${e.vcardArray?.[1]?.find(v=>v[0]==='fn')?.[3] || e.handle || ''}`).join('<br/>');
-        h.push(`<div class="mt-2 text-xs">${ents}</div>`);
-      }
-      els.whoisInfo.innerHTML = h.join('') + (h.length ? '' : pre(j));
+    // Renderers
+    function renderHost(host, ips){ els.hostInfo.innerHTML = [ li('Host', host), li('Resolved A', ips && ips.length ? ips.join(', ') : '—') ].join(''); }
+    function renderDNS(domain, ns, mx, txt, aaaa, dmarc){
+      const nsS=(ns.Answer||[]).map(a=>a.data).join('<br/>')||'—';
+      const mxS=(mx.Answer||[]).map(a=>a.data).join('<br/>')||'—';
+      const txts=(txt.Answer||[]).map(a=>a.data.replace(/^\"|\"$/g,'')).join('<br/>')||'—';
+      const aaaaS=(aaaa.Answer||[]).map(a=>a.data).join('<br/>')||'—';
+      const dmarcS=(dmarc.Answer||[]).map(a=>a.data.replace(/^\"|\"$/g,'')).join('<br/>')||'—';
+      els.dnsInfo.innerHTML = [ li('Domain', domain), `<div class="mt-2 text-slate-400">NS</div><div class="text-xs">${nsS}</div>`, `<div class="mt-2 text-slate-400">MX</div><div class="text-xs">${mxS}</div>`, `<div class="mt-2 text-slate-400">TXT</div><div class="text-xs">${txts}</div>`, `<div class="mt-2 text-slate-400">AAAA</div><div class="text-xs">${aaaaS}</div>`, `<div class="mt-2 text-slate-400">DMARC</div><div class="text-xs">${dmarcS}</div>` ].join('');
     }
+    function renderASN(j){ const parts=[]; parts.push(li('IP', j.ip)); parts.push(li('Org/ASN', `${j.connection?.org || '-'} / AS${j.connection?.asn || '-'}`)); parts.push(li('Country/City', `${j.country || '-'} / ${j.city || '-'}`)); parts.push(li('ISP', j.connection?.isp || '-')); els.asnInfo.innerHTML = parts.join(''); const s=j.security; if(s){ els.repInfo.innerHTML = [ li('Threat level', s.threat_level ?? '-'), li('Flags', [s.is_proxy?'proxy':null,s.is_tor?'tor':null,s.is_vpn?'vpn':null,s.is_bot?'bot':null].filter(Boolean).join(', ')||'none') ].join(''); } }
+    function renderBGP(j){ const d=j.data || {}; const pr=(d.prefixes||[])[0] || {}; const asn=(d.asn || {}).asn || d.asn?.asn; els.bgpInfo.innerHTML = [ li('Prefix', pr.prefix || (d.prefixes && d.prefixes[0]?.prefix) || '-'), li('ASN', asn || '-'), li('RIR', d.rir || '-') ].join(''); }
+    function renderPorts(j){ if(!j || (!j.ports && !j.data && !j.services)){ els.portsInfo.innerHTML='No recent port data.'; return; } const ports=j.ports||[]; let html = li('Open Ports', ports.length? ports.join(', ') : '—'); if(j.cpes && Object.keys(j.cpes).length){ const rows=Object.entries(j.cpes).map(([p,arr])=>`<tr><td class="px-2 py-1 border border-slate-700/50">${p}</td><td class="px-2 py-1 border border-slate-700/50">${arr.join('<br/>')}</td></tr>`).join(''); html += `<div class="mt-2"><div class="text-slate-400 mb-1">CPEs</div><table class="w-full text-xs border border-slate-700/50">${rows}</table></div>`; } els.portsInfo.innerHTML=html; }
+    function renderWHOIS(j){ if(!j){ els.whoisInfo.textContent='No RDAP data.'; return; } const h=[]; if(j.ldhName) h.push(li('Domain', j.ldhName)); if(j.startAddress||j.handle) h.push(li('Handle/Start', `${j.handle||'-'} / ${j.startAddress||'-'}`)); if(j.name) h.push(li('Name', j.name)); if(Array.isArray(j.status)) h.push(li('Status', j.status.join(', '))); if(j.events){ const created=j.events.find(e=>e.eventAction==='registration')?.eventDate; const expires=j.events.find(e=>e.eventAction==='expiration')?.eventDate; const updated=j.events.find(e=>e.eventAction==='last changed')?.eventDate || j.events.find(e=>e.eventAction==='last update of RDAP database')?.eventDate; if(created) h.push(li('Created', new Date(created).toLocaleString())); if(updated) h.push(li('Updated', new Date(updated).toLocaleString())); if(expires) h.push(li('Expires', new Date(expires).toLocaleString())); } els.whoisInfo.innerHTML=h.join(''); }
+    function renderSSL(j){ if(!j||!j.status){ els.sslInfo.textContent='No SSL data.'; return; } if(j.status==='ERROR'){ els.sslInfo.textContent='SSL Labs ERROR or rate limit.'; return; } const ep=(j.endpoints||[])[0]||{}; const details=ep.details||{}; const cert=details.cert||{}; const grade=ep.grade||j.grade||'-'; const issuer=cert.issuerLabel||cert.issuerSubject||'-'; const notBefore=cert.notBefore? new Date(cert.notBefore).toLocaleString():'-'; const notAfter=cert.notAfter? new Date(cert.notAfter).toLocaleString():'-'; const expired = cert.notAfter ? (Date.now()>cert.notAfter) : null; let html=''; html+=li('Grade', grade); html+=li('Issuer', issuer); html+=li('Valid From', notBefore); html+=li('Valid To', notAfter + (expired? ' <span class="text-red-400">(Expired)</span>':'')); els.sslInfo.innerHTML=html; }
+    function renderCT(arr){ if(!arr.length){ els.ctInfo.textContent='No CT entries or blocked.'; return; } const rows = arr.slice(0,30).map(x=>`<tr><td class="px-2 py-1 border border-slate-700/40">${esc(x.common_name||'-')}</td><td class="px-2 py-1 border border-slate-700/40">${esc((x.name_value||'').replace(/\n/g,' , '))}</td><td class="px-2 py-1 border border-slate-700/40">${esc(x.issuer_name||'-')}</td><td class="px-2 py-1 border border-slate-700/40">${esc(x.not_after||'-')}</td></tr>`).join(''); els.ctInfo.innerHTML = `<div class="text-xs text-slate-400 mb-2">Recent CT entries (max 30). <a class="link" target="_blank" href="https://crt.sh/">Open crt.sh</a></div><table class="w-full text-xs border border-slate-700/40"><thead class="text-slate-400"><tr><th class="px-2 py-1 text-left">CN</th><th class="px-2 py-1 text-left">DNS Names</th><th class="px-2 py-1 text-left">Issuer</th><th class="px-2 py-1 text-left">Not After</th></tr></thead><tbody>${rows}</tbody></table>`; }
+    function renderUrlscan(j){ const res=j.results||[]; if(!res.length){ els.urlscanInfo.textContent='No recent urlscan.io results.'; return; } const rows=res.slice(0,10).map(x=>{ const task=x.task||{}; const page=x.page||{}; const result=x.result||x._id||''; const when=task.time? new Date(task.time).toLocaleString():'-'; const url=task.url||page.url||''; const link=result? `<a class="link" target="_blank" href="${result}">report</a>`:''; return `<tr><td class="px-2 py-1 border border-slate-700/40">${esc(when)}</td><td class="px-2 py-1 border border-slate-700/40">${esc(url)}</td><td class="px-2 py-1 border border-slate-700/40">${link}</td></tr>`; }).join(''); els.urlscanInfo.innerHTML = `<table class="w-full text-xs border border-slate-700/40"><thead class="text-slate-400"><tr><th class="px-2 py-1 text-left">When</th><th class="px-2 py-1 text-left">URL</th><th class="px-2 py-1 text-left">Report</th></tr></thead><tbody>${rows}</tbody></table>`; }
+    function renderWayback(j){ if(!Array.isArray(j)||!j.length){ els.wbInfo.textContent='No snapshots.'; return; } const rows = j.slice(1).map(r=>{ const ts=r[1]; const url=r[2]; const date=`${ts.slice(0,4)}-${ts.slice(4,6)}-${ts.slice(6,8)} ${ts.slice(8,10)}:${ts.slice(10,12)}`; const link=`https://web.archive.org/web/${ts}/${url}`; return `<tr><td class="px-2 py-1 border border-slate-700/40">${date}</td><td class="px-2 py-1 border border-slate-700/40"><a class="link" target="_blank" href="${link}">${esc(url)}</a></td></tr>`; }).join(''); els.wbInfo.innerHTML = `<table class="w-full text-xs border border-slate-700/40"><thead class="text-slate-400"><tr><th class="px-2 py-1 text-left">When</th><th class="px-2 py-1 text-left">URL</th></tr></thead><tbody>${rows}</tbody></table>`; }
+    function renderSecurityTxt(res){ els.secTxtInfo.innerHTML = res ? `<div class="text-xs text-slate-400 mb-1">Found at: <a class="link" target="_blank" href="${res.url}">${res.url}</a></div><pre class="text-xs bg-black/30 border border-slate-700/40 rounded p-2 overflow-x-auto">${esc(res.text)}</pre>` : 'Not published.'; }
+    function renderRobots(text, host){ els.robotsInfo.innerHTML = `<div class="text-xs text-slate-400 mb-1">Source: <a class="link" target="_blank" href="https://${host}/robots.txt">https://${host}/robots.txt</a></div><pre class="text-xs bg-black/30 border border-slate-700/40 rounded p-2 overflow-x-auto">${esc(text)}</pre>`; }
+    function renderHSTS(j){ els.hstsInfo.innerHTML = [ li('Status', j.status || '-'), li('Preload eligible', String(j.preloadable ?? '-')), li('Issues', (j.issues||[]).map(x=>x.message).slice(0,5).join(' | ') || '-') ].join(''); }
+    function renderFavicon(res, host){ els.favInfo.innerHTML = res ? `${li('mmh3 hash', res.hash)}<div class="text-xs mt-1"><a class="link" target="_blank" href="https://www.shodan.io/search?query=http.favicon.hash%3A${res.hash}">Search this hash on Shodan</a></div>` : 'No favicon.'; }
+    function renderTech(html){ const r = sniffTech(html); const libs = r.libs.slice(0,10).map(u=>`<div class="text-xs">${esc(u)}</div>`).join(''); els.techInfo.innerHTML = [ (r.hints.length? `<div>${r.hints.map(h=>`<div>${h}</div>`).join('')}</div>`: 'No obvious tech hints.'), (libs? `<div class="mt-2 text-slate-400">Script URLs</div>${libs}`:'') ].join(''); }
+    function renderSocial(domain){ const q=encodeURIComponent(domain); els.socInfo.innerHTML = `<div class="text-xs text-slate-400 mb-1">Quick pivots:</div><ul class="list-disc ml-5 space-y-1"><li><a class="link" target="_blank" href="https://www.google.com/search?q=site:hackerone.com+${q}">HackerOne program</a></li><li><a class="link" target="_blank" href="https://www.google.com/search?q=site:bugcrowd.com+${q}">Bugcrowd program</a></li><li><a class="link" target="_blank" href="https://www.google.com/search?q=site:twitter.com+${q}">Twitter/X</a></li><li><a class="link" target="_blank" href="https://www.google.com/search?q=site:github.com+${q}">GitHub</a></li><li><a class="link" target="_blank" href="https://haveibeenpwned.com/DomainSearch">HIBP (domain verification required)</a></li></ul>`; }
 
-    function renderSSL(j) {
-      if (!j || !j.status) { els.sslInfo.textContent = 'No SSL data.'; return; }
-      if (j.status === 'ERROR') { els.sslInfo.textContent = 'SSL Labs returned ERROR or rate limit.'; return; }
-      const ep = (j.endpoints||[])[0] || {};
-      const details = ep.details || {};
-      const cert = details.cert || {};
-      const grade = ep.grade || j.grade || '-';
-      const issuer = cert.issuerLabel || cert.issuerSubject || '-';
-      const notBefore = cert.notBefore ? new Date(cert.notBefore).toLocaleString() : '-';
-      const notAfter = cert.notAfter ? new Date(cert.notAfter).toLocaleString() : '-';
-      const expired = cert.notAfter ? (Date.now() > cert.notAfter) : null;
-
-      let html = '';
-      html += li('Grade', grade);
-      html += li('Issuer', issuer);
-      html += li('Valid From', notBefore);
-      html += li('Valid To', notAfter + (expired ? ' <span class="text-red-400">(Expired)</span>' : ''));
-      if (details.protocols) {
-        html += `<div class="mt-2"><span class="text-slate-400">Protocols:</span> ${(details.protocols||[]).map(p=>`${p.name} ${p.version}`).join(', ') || '-'}</div>`;
-      }
-      if (details.suites && details.suites.list) {
-        html += `<div class="mt-2 text-xs text-slate-400">Key Exch/Forward Secrecy: ${details.forwardSecrecy === 2 ? 'Yes' : details.forwardSecrecy === 1 ? 'Some' : 'No'}</div>`;
-      }
-      els.sslInfo.innerHTML = html;
-    }
-
-    // --------------------- Orchestrator ---------------------
-    async function runRecon() {
-      const raw = strip(els.target.value);
-      if (!raw) { alert('Enter a domain or IP'); return; }
-
+    // Orchestrator
+    async function runRecon(){
+      const raw = strip(els.target.value); if(!raw){ alert('Enter a domain or IP'); return; }
       clearPanels();
-      setLoading(els.hostLoader, true);
-      setLoading(els.asnLoader, true);
-      setLoading(els.sslLoader, true);
-      setLoading(els.portsLoader, true);
-      setLoading(els.whoisLoader, true);
+      // turn on loaders
+      [els.hostLoader,els.dnsLoader,els.asnLoader,els.bgpLoader,els.sslLoader,els.ctLoader,els.portsLoader,els.whoisLoader,els.hstsLoader,els.secTxtLoader,els.robotsLoader,els.urlscanLoader,els.wbLoader,els.favLoader,els.techLoader,els.socLoader].forEach(l=>setLoading(l,true));
 
-      let host = raw;
-      let ip = null;
+      let ip=null; let ips=[];
+      try{ if(isIP(raw)){ ip=raw; ips=[raw]; renderHost(raw, ips); } else { ips = await resolveA(raw); ip = ips[0]||null; renderHost(raw, ips); } } catch{ renderHost(raw, []); } finally{ setLoading(els.hostLoader,false); }
 
-      try {
-        if (isIP(raw)) {
-          ip = raw;
-          renderHost(raw, [raw]);
-        } else {
-          const ips = await resolveA(raw);
-          ip = ips[0] || null;
-          renderHost(raw, ips);
-        }
-      } catch (e) {
-        renderHost(raw, []);
-      } finally {
-        setLoading(els.hostLoader, false);
-      }
+      // DNS suite (hostnames only)
+      try{
+        if(!isIP(raw)){
+          const [ns,mx,txt,aaaa,dmarc] = await Promise.all([
+            doh(raw,'NS'), doh(raw,'MX'), doh(raw,'TXT'), doh(raw,'AAAA'), doh(`_dmarc.${raw}`,'TXT').catch(()=>({}))
+          ]);
+          renderDNS(raw, ns, mx, txt, aaaa, dmarc||{Answer:[]});
+        } else { els.dnsInfo.textContent='DNS details require a hostname.'; }
+      } catch(e){ els.dnsInfo.textContent='DNS lookups failed.'; } finally { setLoading(els.dnsLoader,false); }
 
-      // Hosting / ASN
-      try {
-        if (ip) {
-          const j = await getIpIntel(ip);
-          renderASN(j);
-        } else {
-          els.asnInfo.textContent = 'No IP resolved.';
-        }
-      } catch (e) {
-        els.asnInfo.textContent = 'Failed to fetch IP intel.';
-      } finally { setLoading(els.asnLoader, false); }
+      // ASN/Reputation/BGP
+      try{ if(ip){ const j = await getIpIntel(ip); renderASN(j); } else { els.asnInfo.textContent='No IP resolved.'; } } catch{ els.asnInfo.textContent='IP intel failed.'; } finally { setLoading(els.asnLoader,false); }
+      try{ if(ip){ const b = await getBGP(ip); renderBGP(b); } else { els.bgpInfo.textContent='No IP resolved.'; } } catch{ els.bgpInfo.textContent='BGP query failed.'; } finally { setLoading(els.bgpLoader,false); }
 
-      // Ports
-      try {
-        if (ip) {
-          const j = await getOpenPorts(ip);
-          renderPorts(j);
-        } else {
-          els.portsInfo.textContent = 'No IP resolved.';
-        }
-      } catch (e) {
-        els.portsInfo.textContent = 'Failed to fetch open ports.';
-      } finally { setLoading(els.portsLoader, false); }
+      // Ports (passive)
+      try{ if(ip){ const p = await getOpenPorts(ip); renderPorts(p); } else { els.portsInfo.textContent='No IP resolved.'; } } catch{ els.portsInfo.textContent='Open ports fetch failed.'; } finally { setLoading(els.portsLoader,false); }
 
       // WHOIS / RDAP
-      try {
-        if (isIP(raw)) {
-          const j = await getRdapIP(raw);
-          renderWHOIS(j);
-        } else {
-          const j = await getRdapDomain(raw);
-          renderWHOIS(j);
-        }
-      } catch (e) {
-        els.whoisInfo.textContent = 'Failed to fetch RDAP/WHOIS.';
-      } finally { setLoading(els.whoisLoader, false); }
+      try{ if(isIP(raw)){ const j=await getRdapIP(raw); renderWHOIS(j); } else { const j=await getRdapDomain(raw); renderWHOIS(j); } } catch{ els.whoisInfo.textContent='RDAP/WHOIS failed.'; } finally { setLoading(els.whoisLoader,false); }
+
+      // HSTS preload (hostnames only)
+      try{ if(!isIP(raw)){ const j=await getHSTS(raw); renderHSTS(j); } else { els.hstsInfo.textContent='HSTS requires hostname.'; } } catch{ els.hstsInfo.textContent='HSTS query failed.'; } finally { setLoading(els.hstsLoader,false); }
+
+      // security.txt & robots
+      try{ if(!isIP(raw)){ const s=await getSecurityTxt(raw); renderSecurityTxt(s); } else { els.secTxtInfo.textContent='security.txt requires hostname.'; } } catch{ els.secTxtInfo.textContent='No security.txt published.'; } finally { setLoading(els.secTxtLoader,false); }
+      try{ if(!isIP(raw)){ const t=await getRobots(raw); renderRobots(t, raw); } else { els.robotsInfo.textContent='robots.txt requires hostname.'; } } catch{ els.robotsInfo.textContent='No robots.txt or blocked.'; } finally { setLoading(els.robotsLoader,false); }
+
+      // urlscan.io & Wayback (hostnames only)
+      try{ if(!isIP(raw)){ const u=await getUrlscan(raw); renderUrlscan(u); } else { els.urlscanInfo.textContent='urlscan requires hostname.'; } } catch{ els.urlscanInfo.textContent='urlscan query failed.'; } finally { setLoading(els.urlscanLoader,false); }
+      try{ if(!isIP(raw)){ const w=await getWayback(raw); renderWayback(w); } else { els.wbInfo.textContent='Wayback requires hostname.'; } } catch{ els.wbInfo.textContent='Wayback query failed.'; } finally { setLoading(els.wbLoader,false); }
+
+      // Favicon hash & tech hints (hostnames only)
+      try{ if(!isIP(raw)){ const f=await getFaviconHash(raw); renderFavicon(f, raw); } else { els.favInfo.textContent='Favicon requires hostname.'; } } catch{ els.favInfo.textContent='Favicon not found or blocked.'; } finally { setLoading(els.favLoader,false); }
+      try{ if(!isIP(raw)){ const html=await getHTML(raw); renderTech(html); } else { els.techInfo.textContent='HTML fetch requires hostname.'; } } catch{ els.techInfo.textContent='HTML fetch blocked by site.'; } finally { setLoading(els.techLoader,false); }
+
+      // Social / disclosure links
+      try{ if(!isIP(raw)){ renderSocial(raw); } else { els.socInfo.textContent='Use a domain for social pivots.'; } } finally { setLoading(els.socLoader,false); }
 
       // SSL (hostnames only)
-      try {
-        if (!isIP(raw)) {
-          const j = await getSslAnalysis(raw);
-          renderSSL(j);
-        } else {
-          els.sslInfo.textContent = 'SSL analysis requires a hostname.';
-        }
-      } catch (e) {
-        els.sslInfo.textContent = 'SSL Labs query failed or rate-limited.';
-      } finally { setLoading(els.sslLoader, false); }
+      try{ if(!isIP(raw)){ const j=await getSslAnalysis(raw); renderSSL(j); } else { els.sslInfo.textContent='SSL analysis requires hostname.'; } } catch{ els.sslInfo.textContent='SSL Labs query failed or rate-limited.'; } finally { setLoading(els.sslLoader,false); }
     }
 
-    // --------------------- Event wiring ---------------------
+    // Events
     els.scanBtn.addEventListener('click', runRecon);
-    els.resetBtn.addEventListener('click', () => { els.target.value = ''; clearPanels(); });
-    els.target.addEventListener('keydown', (e) => { if (e.key === 'Enter') runRecon(); });
+    els.resetBtn.addEventListener('click', ()=>{ els.target.value=''; clearPanels(); });
+    els.target.addEventListener('keydown', e=>{ if(e.key==='Enter') runRecon(); });
   </script>
 </body>
 </html>
