@@ -1,249 +1,128 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>OSINT Lookup Dashboard</title>
+<style>
+  :root {
+    --bg:#0f111a; --panel:#1a1d2b; --accent:#00bfa5;
+    --text:#f5f5f5; --muted:#9fa6b2; --border:#2a2e3f; --danger:#ff5252;
+  }
+  body{background:var(--bg);color:var(--text);font-family:"Segoe UI",sans-serif;margin:0}
+  header{background:linear-gradient(90deg,#00bfa5,#1de9b6);color:#000;text-align:center;padding:16px;font-weight:600;font-size:1.3em}
+  .input-bar{text-align:center;margin:20px}
+  input{width:300px;padding:8px 12px;border:1px solid var(--accent);border-radius:5px;background:#151827;color:var(--text)}
+  button{background:var(--accent);border:none;border-radius:5px;padding:8px 14px;margin-left:10px;cursor:pointer;font-weight:600}
+  button:hover{filter:brightness(1.1)}
+  .grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(340px,1fr));gap:20px;padding:20px}
+  .panel{background:var(--panel);border:1px solid var(--border);border-radius:10px;padding:16px;box-shadow:0 4px 8px rgba(0,0,0,0.3)}
+  .panel h2{border-bottom:2px solid var(--accent);padding-bottom:8px;margin-top:0}
+  pre{background:#11141f;color:var(--muted);padding:12px;border-radius:6px;overflow:auto;font-size:.9em}
+  footer{text-align:center;color:var(--muted);padding:15px;border-top:1px solid var(--border)}
+  .score.low{color:#00e676}.score.med{color:#ffd166}.score.high{color:var(--danger)}
+</style>
+</head>
+<body>
+<header>OSINT Lookup Dashboard</header>
+<div class="input-bar">
+  <input id="domainInput" type="text" placeholder="Enter domain or URL (e.g., https://example.com)">
+  <button onclick="runLookup()">Run</button>
+</div>
+<div class="grid">
+  <div class="panel"><h2>Reputation & Hosting</h2><pre id="reputation">Waiting for input...</pre></div>
+  <div class="panel"><h2>WHOIS / RDAP</h2><pre id="whois">Waiting for input...</pre></div>
+  <div class="panel"><h2>DNS Records</h2><pre id="dns">Waiting for input...</pre></div>
+  <div class="panel"><h2>Subdomains</h2><pre id="subs">Waiting for input...</pre></div>
+  <div class="panel"><h2>Mail TXT / SPF / DMARC</h2><pre id="mail">Waiting for input...</pre></div>
+  <div class="panel"><h2>Wayback Snapshots</h2><pre id="wayback">Waiting for input...</pre></div>
+</div>
+<footer>© 2025 OSINT Lookup Pro | Fixed CORS + Reputation Edition</footer>
 <script>
-  // ===== Helper =====
-  const el = id => document.getElementById(id);
+async function fetchJSON(url){
+  try{
+    const res=await fetch(url);
+    if(!res.ok)throw new Error(res.status);
+    return await res.json();
+  }catch(e){
+    // try proxy if blocked
+    const proxy=`https://api.allorigins.win/raw?url=${encodeURIComponent(url)}`;
+    const res2=await fetch(proxy);
+    if(!res2.ok)throw new Error(res2.status);
+    return await res2.json();
+  }
+}
+function domainOnly(str){try{return new URL(str).hostname}catch{return str}}
+function riskLabel(score){return score>=70?`<span class='score high'>${score} (High)</span>`:score>=40?`<span class='score med'>${score} (Medium)</span>`:`<span class='score low'>${score} (Low)</span>`}
 
-  // Fetch JSON with transparent CORS fallback (AllOrigins)
-  async function fetchJSON(url, opts = {}, timeoutMs = 12000) {
-    // Try direct first
-    const direct = await tryFetchJSON(url, opts, timeoutMs);
-    if (!direct._error) return direct;
+async function runLookup(){
+  const input=document.getElementById('domainInput').value.trim();
+  if(!input)return alert('Enter domain or URL');
+  const domain=domainOnly(input);
+  document.getElementById('whois').textContent='Loading...';
+  document.getElementById('dns').textContent='Loading...';
+  document.getElementById('subs').textContent='Loading...';
+  document.getElementById('mail').textContent='Loading...';
+  document.getElementById('wayback').textContent='Loading...';
+  document.getElementById('reputation').textContent='Loading...';
 
-    // Fallback via AllOrigins proxy
-    const proxiedURL = `https://api.allorigins.win/raw?url=${encodeURIComponent(url)}`;
-    const proxied = await tryFetchAsText(proxiedURL, opts, timeoutMs);
-    if (!proxied._error) {
-      try { return JSON.parse(proxied.text); }
-      catch (e) { return { _error: `Proxy JSON parse failed: ${e.message}`, _url: url }; }
+  // WHOIS / RDAP
+  let whois=''; 
+  try{
+    const rdap=await fetchJSON(`https://rdap.org/domain/${domain}`);
+    whois=`Domain: ${rdap.ldhName||domain}\nRegistrar: ${(rdap.entities||[])[0]?.vcardArray?.[1]?.find(v=>v[0]==='fn')?.[3]||'—'}\nCreated: ${(rdap.events||[]).find(e=>e.eventAction==='registration')?.eventDate||'—'}\nExpires: ${(rdap.events||[]).find(e=>e.eventAction==='expiration')?.eventDate||'—'}`;
+  }catch{whois='RDAP lookup failed';}
+  document.getElementById('whois').textContent=whois;
+
+  // DNS
+  let ips=[];
+  try{
+    const dns=await fetchJSON(`https://dns.google/resolve?name=${domain}`);
+    ips=(dns.Answer||[]).filter(a=>a.type===1).map(a=>a.data);
+    document.getElementById('dns').textContent=ips.length?`A: ${ips.join(', ')}`:'No A records';
+  }catch{document.getElementById('dns').textContent='DNS lookup failed';}
+
+  // SPF / DMARC
+  try{
+    const txt=await fetchJSON(`https://dns.google/resolve?name=${domain}&type=TXT`);
+    const spf=(txt.Answer||[]).map(a=>a.data).find(t=>t.includes('spf'))||'—';
+    const dmarc=await fetchJSON(`https://dns.google/resolve?name=_dmarc.${domain}&type=TXT`);
+    const dmarcVal=(dmarc.Answer||[]).map(a=>a.data).find(t=>t.includes('DMARC'))||'—';
+    document.getElementById('mail').textContent=`SPF: ${spf}\nDMARC: ${dmarcVal}`;
+  }catch{document.getElementById('mail').textContent='Mail TXT lookup failed';}
+
+  // Subdomains via urlscan (with proxy fallback)
+  try{
+    const subdata=await fetchJSON(`https://urlscan.io/api/v1/search/?q=domain:${domain}`);
+    const subs=[...new Set((subdata.results||[]).map(r=>r.page?.domain).filter(Boolean))];
+    document.getElementById('subs').textContent=subs.slice(0,30).join('\n')||'No subdomains found';
+  }catch(e){document.getElementById('subs').textContent='urlscan fetch failed';}
+
+  // Wayback snapshots (CDX API)
+  try{
+    const wb=await fetchJSON(`https://web.archive.org/cdx/search/cdx?url=${domain}/*&output=json&fl=timestamp,original&limit=5&collapse=timestamp:8`);
+    if(Array.isArray(wb)&&wb.length>1){
+      const list=wb.slice(1).map(x=>`${x[0].slice(0,4)}-${x[0].slice(4,6)}-${x[0].slice(6,8)}  ${x[1]}`);
+      document.getElementById('wayback').textContent=list.join('\n');
+    }else document.getElementById('wayback').textContent='No snapshots found';
+  }catch(e){document.getElementById('wayback').textContent='Wayback fetch failed';}
+
+  // Reputation / Hosting
+  try{
+    let ipInfo='';let risk=0;
+    if(ips.length){
+      const ip=ips[0];
+      const ipdata=await fetchJSON(`https://ipapi.co/${ip}/json/`);
+      ipInfo=`IP: ${ip}\nASN: ${ipdata.asn||'—'}\nOrg: ${ipdata.org||'—'}\nCountry: ${ipdata.country_name||'—'}\nRegion: ${ipdata.region||'—'}\nCity: ${ipdata.city||'—'}`;
+      if(/cloudflare|ovh|digitalocean|aws|azure/i.test(ipdata.org||''))risk+=20;
     }
-    // If both fail, return the direct error (more informative)
-    return direct;
-  }
-
-  async function tryFetchJSON(url, opts = {}, timeoutMs = 12000) {
-    const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), timeoutMs);
-    try {
-      const res = await fetch(url, { ...opts, signal: controller.signal });
-      clearTimeout(timer);
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      return await res.json();
-    } catch (e) {
-      clearTimeout(timer);
-      return { _error: e.message || String(e), _url: url };
-    }
-  }
-
-  async function tryFetchAsText(url, opts = {}, timeoutMs = 12000) {
-    const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), timeoutMs);
-    try {
-      const res = await fetch(url, { ...opts, signal: controller.signal });
-      clearTimeout(timer);
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      return { text: await res.text() };
-    } catch (e) {
-      clearTimeout(timer);
-      return { _error: e.message || String(e), _url: url };
-    }
-  }
-
-  // ===== Your existing functions (unchanged) you already had =====
-  function parseInputToDomain(input) {
-    try { if (/^https?:\/\//i.test(input)) return new URL(input).hostname; return input.split('/')[0].trim(); }
-    catch { return input.trim(); }
-  }
-  function riskBadge(score){
-    if (score >= 70) return `<span class="score high">${score} (High)</span>`;
-    if (score >= 40) return `<span class="score med">${score} (Medium)</span>`;
-    return `<span class="score low">${score} (Low)</span>`;
-  }
-  function isPunycodeOrWeird(domain) {
-    const puny = domain.startsWith('xn--');
-    const manyHyphens = (domain.match(/-/g) || []).length >= 3;
-    const looksLikeIP = /^\d{1,3}(\.\d{1,3}){3}$/.test(domain);
-    const longLabel = domain.split('.').some(l => l.length > 24);
-    return { puny, manyHyphens, looksLikeIP, longLabel };
-  }
-
-  // ===== DNS / RDAP / IP helpers (unchanged from your version) =====
-  async function lookupDNS(domain) {
-    const aRes = await fetchJSON(`https://dns.google/resolve?name=${encodeURIComponent(domain)}&type=A`);
-    const aaaaRes = await fetchJSON(`https://dns.google/resolve?name=${encodeURIComponent(domain)}&type=AAAA`);
-    const mxRes = await fetchJSON(`https://dns.google/resolve?name=${encodeURIComponent(domain)}&type=MX`);
-    const nsRes = await fetchJSON(`https://dns.google/resolve?name=${encodeURIComponent(domain)}&type=NS`);
-    const txtRes = await fetchJSON(`https://dns.google/resolve?name=${encodeURIComponent(domain)}&type=TXT`);
-
-    const flatten = r => (r && r.Answer ? r.Answer.map(a => a.data) : []);
-    const lines = [];
-    lines.push(`A: ${flatten(aRes).join(', ') || '—'}`);
-    lines.push(`AAAA: ${flatten(aaaaRes).join(', ') || '—'}`);
-    lines.push(`MX: ${flatten(mxRes).join(' | ') || '—'}`);
-    lines.push(`NS: ${flatten(nsRes).join(' | ') || '—'}`);
-    lines.push(`TXT: ${(flatten(txtRes).map(t=>t.replace(/^"|"$/g,'')).join(' | ')) || '—'}`);
-    return { text: lines.join('\n'), ips: flatten(aRes) };
-  }
-
-  async function lookupRDAP(domain) {
-    const rdap = await fetchJSON(`https://rdap.org/domain/${encodeURIComponent(domain)}`);
-    if (rdap._error) return { text: `RDAP error: ${rdap._error}`, created: null };
-    const created = rdap.events?.find(e => e.eventAction === 'registration')?.eventDate || null;
-    const expires = rdap.events?.find(e => e.eventAction === 'expiration')?.eventDate || null;
-    const registrar = rdap.entities?.find(e => e.roles?.includes('registrar'))?.vcardArray?.[1]?.find(v=>v[0]==='fn')?.[3] || null;
-    const str = [
-      `Domain: ${rdap.ldhName || domain}`,
-      `Registrar: ${registrar || '—'}`,
-      `Registered: ${created || '—'}`,
-      `Expires: ${expires || '—'}`
-    ].join('\n');
-    return { text: str, created };
-  }
-
-  async function ipEnrich(ip) {
-    const data = await fetchJSON(`https://ipapi.co/${encodeURIComponent(ip)}/json/`);
-    if (data._error) return { ip, text:`${ip} – lookup error: ${data._error}` };
-    const bits = [
-      `IP: ${ip}`,
-      `ASN: ${data.asn || '—'}`,
-      `Org/ISP: ${data.org || data.asn_org || '—'}`,
-      `Country: ${data.country_name || '—'}`,
-      `Region/City: ${data.region || '—'} / ${data.city || '—'}`,
-      `Latitude/Longitude: ${data.latitude ?? '—'} / ${data.longitude ?? '—'}`
-    ];
-    return { ip, text: bits.join('\n'), org: data.org || data.asn_org };
-  }
-
-  // ===== FIXED: Subdomains via urlscan with CORS fallback =====
-  async function lookupSubdomains(domain) {
-    const res = await fetchJSON(`https://urlscan.io/api/v1/search/?q=domain:${encodeURIComponent(domain)}`);
-    if (res._error) return `urlscan search error: ${res._error}`;
-    const set = new Set();
-    (res.results || []).slice(0, 80).forEach(r => {
-      const d = r?.page?.domain || r?.task?.domain;
-      if (d && (d === domain || d.endsWith(`.${domain}`))) set.add(d);
-    });
-    return [...set].slice(0, 50).join('\n') || '—';
-  }
-
-  // ===== FIXED: Wayback CDX via CORS fallback =====
-  async function wayback(domain) {
-    const r = await fetchJSON(`https://web.archive.org/cdx/search/cdx?url=${encodeURIComponent(domain)}/*&output=json&fl=timestamp,original&limit=5&filter=statuscode:200&collapse=timestamp:8`);
-    if (r._error) return `Wayback error: ${r._error}`;
-    if (!Array.isArray(r) || r.length < 2) return 'No snapshots found.';
-    const rows = r.slice(1).map(row => {
-      const ts = row[0];
-      const y = ts.slice(0,4), m = ts.slice(4,6), d = ts.slice(6,8);
-      return `${y}-${m}-${d}  ${row[1]}`;
-    });
-    return `Recent snapshots:\n${rows.join('\n')}`;
-  }
-
-  // ===== Mail TXT / Robots same as before =====
-  async function lookupMail(domain) {
-    const txtRes = await fetchJSON(`https://dns.google/resolve?name=${encodeURIComponent(domain)}&type=TXT`);
-    const txts = (txtRes.Answer || []).map(a => a.data.replace(/^"|"$/g,''));
-    const spf = txts.find(t => /^v=spf1/i.test(t)) || '—';
-    const dmarcRes = await fetchJSON(`https://dns.google/resolve?name=_dmarc.${encodeURIComponent(domain)}&type=TXT`);
-    const dmarc = (dmarcRes.Answer || []).map(a=>a.data.replace(/^"|"$/g,'')).find(t=>/^v=DMARC1/i.test(t)) || '—';
-    return `SPF: ${spf}\nDMARC: ${dmarc}`;
-  }
-
-  async function robotsAndSitemap(domain) {
-    async function getText(url) {
-      const r = await tryFetchAsText(url);
-      return r._error ? `Not Found or blocked (${r._error})` : r.text.slice(0,800);
-    }
-    const robots = await getText(`https://${domain}/robots.txt`);
-    const sitemap = await getText(`https://${domain}/sitemap.xml`);
-    return `robots.txt:\n${robots || '—'}\n\nsitemap.xml:\n${sitemap || '—'}`;
-  }
-
-  // ===== Reputation (unchanged logic, uses ipEnrich etc.) =====
-  async function reputation(domain, ips, createdISO) {
-    const us = await fetchJSON(`https://urlscan.io/api/v1/search/?q=domain:${encodeURIComponent(domain)}`);
-    const verdicts = [];
-    if (!us._error && Array.isArray(us.results)) {
-      us.results.slice(0,50).forEach(r=>{
-        const v = r?.verdicts?.overall;
-        if (v && typeof v.malicious === 'boolean') verdicts.push(v.malicious);
-      });
-    }
-    const otx = await fetchJSON(`https://otx.alienvault.com/api/v1/indicators/domain/${encodeURIComponent(domain)}/general`);
-    const pulseCount = otx._error ? null : (otx.pulse_info?.count ?? 0);
-
-    let score = 0; const hints = [];
-    if (createdISO) {
-      const days = Math.floor((Date.now() - Date.parse(createdISO)) / 86400000);
-      if (!isNaN(days)) { hints.push(`Domain age: ~${days} days`); if (days < 30) score+=35; else if (days < 90) score+=20; }
-    }
-    const malHits = verdicts.filter(Boolean).length;
-    if (malHits > 0) { score += Math.min(60, 20 + malHits * 8); hints.push(`urlscan malicious matches: ${malHits}`); }
-    if (pulseCount !== null) {
-      if (pulseCount > 0) { score += Math.min(50, 15 + pulseCount * 5); hints.push(`OTX pulses: ${pulseCount}`); }
-      else { hints.push('OTX pulses: 0'); }
-    }
-
-    const geoLines = [];
-    for (const ip of (ips||[]).slice(0,3)) {
-      const info = await ipEnrich(ip);
-      geoLines.push(info.text);
-    }
-    score = Math.max(0, Math.min(100, score));
-
-    const weird = isPunycodeOrWeird(domain);
-    if (weird.puny || weird.manyHyphens || weird.longLabel) { score = Math.min(100, score + 10); hints.push('Suspicious domain pattern'); }
-
-    const repText = [
-      `Domain: ${domain}`,
-      `IPs: ${(ips||[]).join(', ') || '—'}`,
-      `Risk Score: ${score} (${score>=70?'High':score>=40?'Medium':'Low'})`,
-      '',
-      'Signals:',
-      `- urlscan malicious sightings: ${malHits}`,
-      `- OTX pulses: ${pulseCount === null ? 'Unavailable (CORS/limit)' : pulseCount}`,
-      ...(createdISO ? [`- Registered: ${createdISO}`] : []),
-      ...(weird.puny ? ['- Punycode: YES'] : []),
-      ...(weird.manyHyphens ? ['- Many hyphens: YES'] : []),
-      ...(weird.longLabel ? ['- Long label: YES'] : []),
-      '',
-      'IP / Hosting details:',
-      geoLines.join('\n\n') || '—'
-    ].join('\n');
-
-    return { score, hints, text: repText };
-  }
-
-  // ===== Main runner (same as before, calls the fixed funcs) =====
-  async function runLookup() {
-    const raw = document.getElementById('domainInput').value.trim();
-    if (!raw) return alert('Please enter a domain or URL.');
-    const domain = parseInputToDomain(raw);
-
-    document.getElementById('repSummary').innerHTML = 'Checking reputation & hosting…';
-    document.getElementById('reputation').textContent = '—';
-    document.getElementById('whois').textContent = `Fetching RDAP for ${domain}…`;
-    document.getElementById('dns').textContent = `Resolving DNS for ${domain}…`;
-    document.getElementById('subs').textContent = `Querying subdomains (urlscan)…`;
-    document.getElementById('mail').textContent = `Retrieving SPF/DMARC…`;
-    document.getElementById('robots').textContent = `Fetching robots.txt/sitemap.xml…`;
-    document.getElementById('wayback').textContent = `Querying Wayback snapshots…`;
-
-    const rd = await lookupRDAP(domain);  document.getElementById('whois').textContent = rd.text;
-    const dns = await lookupDNS(domain);  document.getElementById('dns').textContent = dns.text;
-
-    const rep = await reputation(domain, dns.ips || [], rd.created);
-    document.getElementById('reputation').textContent = rep.text;
-    document.getElementById('repSummary').innerHTML = `
-      <div class="row">
-        <span class="pill">Domain: ${domain}</span>
-        <span class="pill">IPs: ${(dns.ips || []).slice(0,3).join(', ') || '—'}</span>
-        <span class="pill">Score: ${riskBadge(rep.score)}</span>
-      </div>`;
-
-    const subs = await lookupSubdomains(domain); document.getElementById('subs').textContent = subs || '—';
-    const mail = await lookupMail(domain);       document.getElementById('mail').textContent = mail;
-    const rob = await robotsAndSitemap(domain);  document.getElementById('robots').textContent = rob;
-    const wb  = await wayback(domain);           document.getElementById('wayback').textContent = wb;
-  }
-
-  document.getElementById('domainInput').addEventListener('keydown', e => { if (e.key === 'Enter') runLookup(); });
+    // quick risk estimate
+    if(domain.split('.').length>3)risk+=20;
+    if(/[\d-]{5,}/.test(domain))risk+=20;
+    if(domain.length>25)risk+=10;
+    document.getElementById('reputation').innerHTML=`Domain: ${domain}\n${ipInfo}\nRisk Score: ${riskLabel(risk)}`;
+  }catch(e){document.getElementById('reputation').textContent='Reputation check failed';}
+}
 </script>
+</body>
+</html>
