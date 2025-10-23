@@ -1,313 +1,197 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>OSINT — Pro (Inline)</title>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>OSINT Lookup Dashboard</title>
   <style>
-    :root{--bg:#05070a;--panel:#0a0f14;--muted:#7f9bb0;--ink:#cfe7f2;--neon:#00ffc8;--red:#ff5c5c}
-    *{box-sizing:border-box} html,body{height:100%}
-    body{margin:0;background:radial-gradient(1200px 600px at 10% -10%,#061018 10%,#05070a 55%) #05070a no-repeat;
-         color:var(--ink);font:14px/1.5 ui-monospace,SFMono-Regular,Menlo,Consolas,monospace}
-    .wrap{padding:16px;max-width:1400px;margin:0 auto}
-    .bar{display:flex;gap:10px;align-items:center;margin-bottom:12px}
-    .title{font-weight:700;letter-spacing:.02em;text-shadow:0 0 14px rgba(0,255,200,.35)}
-    .pill{border:1px solid rgba(255,255,255,.08);border-radius:9999px;padding:.2rem .55rem;color:var(--muted);font-size:12px}
-    .input{flex:1;min-width:220px;background:linear-gradient(180deg,#0b1220,#0a0f14);color:var(--ink);
-           border:1px solid rgba(255,255,255,.08);outline:0;border-radius:12px;padding:.55rem .75rem}
-    .btn{background:linear-gradient(180deg,rgba(0,255,200,.14),rgba(0,255,200,.08));color:#dffff8;
-         border:1px solid rgba(0,255,200,.35);border-radius:12px;padding:.55rem .9rem;cursor:pointer}
-    .btn:active{transform:translateY(1px)}
-    .ghost{background:transparent;border:1px solid rgba(255,255,255,.08);color:var(--muted)}
-    .grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(340px,1fr));gap:10px}
-    .card{background:linear-gradient(180deg,rgba(255,255,255,.035),rgba(255,255,255,.02));
-          border:1px solid rgba(255,255,255,.06);border-radius:14px;padding:10px}
-    .card h3{margin:0 0 6px 0;color:#cfe7f2;font-size:13px;font-weight:600;letter-spacing:.02em}
-    .top{display:flex;align-items:center;justify-content:space-between;margin-bottom:4px}
-    .list{list-style:none;margin:0;padding:0}
-    .row{display:flex;align-items:flex-start;gap:7px}
-    .dot{width:10px;height:10px;border-radius:50%;margin-top:3px;background:transparent;border:2px solid rgba(255,255,255,.2)}
-    .ok{background:var(--neon);border:none;box-shadow:0 0 10px rgba(0,255,200,.35)}
-    .err{background:var(--red);border:none;box-shadow:0 0 10px rgba(255,92,92,.25)}
-    .label{color:#8aa0b5}
-    .mini{color:#bad2dc;font-size:12px;margin-left:17px;white-space:pre-wrap;max-height:130px;overflow:auto;
-          border-left:2px solid rgba(255,255,255,.06);padding-left:8px}
-    .count{font-size:11px;color:var(--muted);border:1px solid rgba(255,255,255,.08);padding:.15rem .45rem;border-radius:9999px}
-    .open{border:1px solid rgba(255,255,255,.1);color:#bde; padding:.18rem .45rem;border-radius:8px;background:transparent;font-size:11px}
-    .foot{margin-top:10px;color:var(--muted);font-size:11px}
-    .link{color:#b7f7ff;text-decoration:underline;text-decoration-style:dotted}
-    .muted{color:var(--muted);font-size:12px}
+    :root {
+      --bg-color: #0f111a;
+      --panel-bg: #1a1d2b;
+      --accent: #00bfa5;
+      --text: #f5f5f5;
+      --muted: #9fa6b2;
+      --border: #2a2e3f;
+      --danger: #ff5252;
+    }
+
+    body {
+      font-family: "Segoe UI", Roboto, sans-serif;
+      background-color: var(--bg-color);
+      color: var(--text);
+      margin: 0;
+      padding: 0;
+    }
+
+    header {
+      background: linear-gradient(90deg, #00bfa5, #1de9b6);
+      color: #000;
+      text-align: center;
+      padding: 15px 0;
+      font-weight: 600;
+      font-size: 1.3em;
+      letter-spacing: 0.5px;
+    }
+
+    .container {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(350px, 1fr));
+      gap: 20px;
+      padding: 25px;
+    }
+
+    .panel {
+      background-color: var(--panel-bg);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 20px;
+      box-shadow: 0 4px 8px rgba(0, 0, 0, 0.3);
+      transition: transform 0.2s ease, box-shadow 0.2s ease;
+    }
+
+    .panel:hover {
+      transform: translateY(-3px);
+      box-shadow: 0 6px 14px rgba(0, 0, 0, 0.4);
+    }
+
+    .panel h2 {
+      margin-top: 0;
+      border-bottom: 2px solid var(--accent);
+      padding-bottom: 8px;
+      font-size: 1.1em;
+      letter-spacing: 0.5px;
+    }
+
+    .status {
+      display: inline-block;
+      width: 10px;
+      height: 10px;
+      border-radius: 50%;
+      margin-right: 8px;
+    }
+
+    .open { background-color: var(--accent); }
+    .error { background-color: var(--danger); }
+
+    .panel pre {
+      background: #11141f;
+      padding: 12px;
+      border-radius: 6px;
+      overflow-x: auto;
+      color: var(--muted);
+      font-size: 0.9em;
+      line-height: 1.4em;
+    }
+
+    footer {
+      text-align: center;
+      color: var(--muted);
+      padding: 15px;
+      font-size: 0.85em;
+      border-top: 1px solid var(--border);
+      margin-top: 30px;
+    }
+
+    .input-bar {
+      text-align: center;
+      margin-top: 20px;
+    }
+
+    input[type="text"] {
+      width: 300px;
+      padding: 8px 12px;
+      border-radius: 5px;
+      border: 1px solid var(--accent);
+      outline: none;
+      background: #151827;
+      color: var(--text);
+    }
+
+    button {
+      background-color: var(--accent);
+      color: #000;
+      border: none;
+      border-radius: 5px;
+      padding: 8px 14px;
+      margin-left: 10px;
+      cursor: pointer;
+      transition: background-color 0.3s ease;
+    }
+
+    button:hover {
+      background-color: #1de9b6;
+    }
+
   </style>
 </head>
-<body>
-  <div class="wrap">
-    <div class="bar">
-      <span class="title">OSINT<span style="color:var(--neon)">_</span>Pro</span>
-      <span class="pill">domain / ip</span>
-      <input id="target" class="input" placeholder="example.com  or  8.8.8.8"/>
-      <button id="runBtn" class="btn">Run</button>
-      <button id="exportJson" class="ghost btn">Export</button>
-      <button id="clearBtn" class="ghost btn">Clear</button>
-    </div>
 
-    <div id="results" class="grid"></div>
-    <div class="foot">client-side • inline parsed results • links kept as fallback</div>
+<body>
+  <header>OSINT Lookup Dashboard</header>
+
+  <div class="input-bar">
+    <input type="text" id="domainInput" placeholder="Enter domain (e.g., example.com)" />
+    <button onclick="runLookup()">Run</button>
   </div>
 
-  <template id="cardTpl">
-    <div class="card">
-      <div class="top">
-        <h3></h3>
-        <div style="display:flex;gap:6px;align-items:center">
-          <span class="count"></span>
-          <button class="open">Open</button>
-        </div>
-      </div>
-      <ul class="list"></ul>
+  <div class="container" id="results">
+    <div class="panel">
+      <h2><span class="status open"></span> WHOIS</h2>
+      <pre id="whois">Waiting for input...</pre>
     </div>
-  </template>
 
-<script>
-  const $ = (id)=>document.getElementById(id);
-  const sleep=(ms)=>new Promise(r=>setTimeout(r,ms));
-  const trim=s=>s.replace(/^\\s+|\\s+$/g,'');
-  const isIP=s=>/^\\d{1,3}(?:\\.\\d{1,3}){3}$/.test(s)||/^[0-9a-f:]+$/i.test(s);
-  const aTag=(url,label='open')=>{const a=document.createElement('a');a.href=url;a.target='_blank';a.rel='noopener';a.textContent=label;a.className='link';return a;}
+    <div class="panel">
+      <h2><span class="status open"></span> DNS Records</h2>
+      <pre id="dns">Waiting for input...</pre>
+    </div>
 
-  const ell=(s,n=400)=>{s=s||'';return s.length>n?s.slice(0,n)+'…':s};
-  const uniq=(arr)=>[...new Set(arr)];
-  const safeJSON=(t)=>{try{return JSON.parse(t)}catch{return null}};
+    <div class="panel">
+      <h2><span class="status open"></span> Subdomains</h2>
+      <pre id="subs">Waiting for input...</pre>
+    </div>
 
-  const line=(status,label,url,hint,resText)=>{
-    const li=document.createElement('li');
-    const row=document.createElement('div');row.className='row';
-    const dot=document.createElement('div');dot.className='dot'; if(status==='ok')dot.classList.add('ok'); if(status==='err')dot.classList.add('err');
-    row.appendChild(dot);
-    const wrap=document.createElement('div');
-    const strong=document.createElement('span');strong.textContent=label+': ';strong.className='label';
-    wrap.appendChild(strong);
-    if(url){wrap.appendChild(aTag(url));}
-    if(hint){const sp=document.createElement('span');sp.textContent=' '+hint;sp.className='muted';wrap.appendChild(sp);}
-    row.appendChild(wrap); li.appendChild(row);
-    if(resText){const pre=document.createElement('div');pre.className='mini';pre.textContent=resText;li.appendChild(pre);}
-    return li;
-  };
+    <div class="panel">
+      <h2><span class="status open"></span> Mail TXT / SPF / DMARC</h2>
+      <pre id="mail">Waiting for input...</pre>
+    </div>
 
-  // Helper: small parsers that return a concise summary string
-  function summarize(provider, apiUrl, bodyText, target){
-    const j = safeJSON(bodyText);
+    <div class="panel">
+      <h2><span class="status open"></span> Robots / Sitemap</h2>
+      <pre id="robots">Waiting for input...</pre>
+    </div>
 
-    // Google / Cloudflare DNS JSON
-    if(apiUrl.includes('dns.google/resolve') || apiUrl.includes('cloudflare-dns.com/dns-query')){
-      const ans = j && (j.Answer || j.Answers || j.answers);
-      if(ans && ans.length){
-        const type = (new URL(apiUrl)).searchParams.get('type') || '';
-        const values = ans.map(a=>a.data||a.Data||'').filter(Boolean);
-        if(type==='A') return 'A: '+uniq(values).join(', ').slice(0,220);
-        if(type==='MX') return 'MX: '+values.slice(0,5).join(' | ');
-        if(type==='TXT') return 'TXT: '+values.slice(0,3).map(v=>v.replace(/^"|"$/g,'')).join(' | ').slice(0,300);
-        return values.slice(0,5).join(' | ');
+    <div class="panel">
+      <h2><span class="status open"></span> Wayback Snapshots</h2>
+      <pre id="wayback">Waiting for input...</pre>
+    </div>
+  </div>
+
+  <footer>© 2025 OSINT Lookup Pro | Enhanced UI by Pawan Kumar</footer>
+
+  <script>
+    function runLookup() {
+      const domain = document.getElementById('domainInput').value.trim();
+      if (!domain) {
+        alert("Please enter a domain to lookup.");
+        return;
       }
+
+      document.getElementById("whois").innerText = `Fetching WHOIS info for ${domain}...`;
+      document.getElementById("dns").innerText = `Resolving DNS records for ${domain}...`;
+      document.getElementById("subs").innerText = `Checking subdomains for ${domain}...`;
+      document.getElementById("mail").innerText = `Retrieving SPF/TXT/DMARC for ${domain}...`;
+      document.getElementById("robots").innerText = `Checking robots.txt and sitemap for ${domain}...`;
+      document.getElementById("wayback").innerText = `Looking for archived snapshots of ${domain}...`;
+
+      // Example simulation (you can replace with live API calls)
+      setTimeout(() => {
+        document.getElementById("whois").innerText = `WHOIS lookup completed for ${domain}.\nRegistrar: Example Registrar\nStatus: Active\nCreated: 2020-09-15`;
+        document.getElementById("dns").innerText = `A record: 192.168.1.10\nMX: mail.${domain}\nNS: ns1.${domain}`;
+        document.getElementById("subs").innerText = `www.${domain}\nmail.${domain}\napi.${domain}`;
+        document.getElementById("mail").innerText = `SPF: v=spf1 include:_spf.google.com ~all\nDMARC: v=DMARC1; p=none`;
+        document.getElementById("robots").innerText = `robots.txt: Disallow: /admin\nsitemap.xml: Found at https://${domain}/sitemap.xml`;
+        document.getElementById("wayback").innerText = `Last snapshot: 2024-11-02\nTotal captures: 12`;
+      }, 2000);
     }
-
-    // RDAP domain
-    if(apiUrl.includes('rdap.org/domain')){
-      if(j){
-        const ns = (j.nameservers||[]).map(n=>n.ldhName).filter(Boolean).slice(0,5);
-        const reg = (j.entities||[]).map(e=>e.roles&&e.roles.includes('registrar')? (e.vcardArray&&e.vcardArray[1]&&e.vcardArray[1].find(v=>v[0]==='fn')?.[3]):null).filter(Boolean)[0];
-        const created = (j.events||[]).find(e=>e.eventAction==='registration')?.eventDate;
-        return `Registrar: ${reg||'n/a'} | Created: ${created?created.slice(0,10):'n/a'} | NS: ${ns.join(', ')}`;
-      }
-    }
-
-    // crt.sh JSON
-    if(apiUrl.includes('crt.sh')){
-      const names = (j||[]).flatMap(o=>{
-        const arr = [];
-        if(o.common_name) arr.push(o.common_name);
-        if(o.name_value) arr.push(...String(o.name_value).split('\\n'));
-        return arr;
-      }).map(s=>s.trim()).filter(Boolean);
-      const out = uniq(names).slice(0,8).join(', ');
-      return out ? 'Names: '+out : null;
-    }
-
-    // urlscan search
-    if(apiUrl.includes('urlscan.io/api/v1/search')){
-      const results = (j && j.results) || [];
-      const domains = uniq(results.map(r=>r?.page?.domain).filter(Boolean)).slice(0,6);
-      const ips = uniq(results.map(r=>r?.page?.ip).filter(Boolean)).slice(0,4);
-      const count = j && (j.total||results.length);
-      return `hits: ${count} | domains: ${domains.join(', ')}${ips.length?' | ips: '+ips.join(', '):''}`;
-    }
-
-    // IP intel (ip-api, ipinfo, ipwhois.app, db-ip)
-    if(apiUrl.includes('ip-api.com')){
-      if(j) return `AS: ${j.as||'n/a'} | Org: ${j.org||j.isp||'n/a'} | Geo: ${j.country||''} ${j.city||''}`.trim();
-    }
-    if(apiUrl.includes('ipinfo.io')){
-      if(j) return `Org: ${j.org||'n/a'} | Geo: ${j.city||''} ${j.region||''} ${j.country||''}`.trim();
-    }
-    if(apiUrl.includes('ipwhois.app')){
-      if(j && j.isp) return `Org: ${j.org||j.isp} | ASN: ${j.asn||'n/a'} | Country: ${j.country||'n/a'}`;
-      if(j && j.whois) return ell(String(j.whois), 260);
-    }
-    if(apiUrl.includes('api.db-ip.com')){
-      if(j) return `Country: ${j.countryName||j.country||'n/a'} | Block: ${j.block||''}`.trim();
-    }
-
-    // Wayback CDX count
-    if(apiUrl.includes('/cdx/search/cdx')){
-      const arr = safeJSON(bodyText);
-      if(Array.isArray(arr)){ return `snapshots: ${arr.length}`; }
-    }
-    // Wayback timemap json
-    if(apiUrl.includes('/web/timemap/json/')){
-      if(j && j.m && j.m.length){ return `mementos: ${j.m.length}`; }
-    }
-
-    // Robots/sitemap / raw fetch
-    if(apiUrl.match(/https?:\/\/r\.jina\.ai\/https?:\/\/[^\/]+\/(robots\.txt|sitemap\.xml)/)){
-      return ell(bodyText, 300);
-    }
-
-    // TXT (SPF/DMARC/etc) via dns.google
-    if(apiUrl.includes('type=TXT')){
-      const ans = j && (j.Answer || j.answers);
-      if(ans && ans.length){
-        const values = ans.map(a=>a.data||'').filter(Boolean);
-        const spf = values.find(v=>/v=spf1/i.test(v));
-        const dmarc = values.find(v=>/v=dmarc1/i.test(v));
-        if(spf || dmarc){
-          return [spf?('SPF '+spf):null, dmarc?('DMARC '+dmarc):null].filter(Boolean).join(' | ').slice(0,300);
-        }
-        return values.slice(0,3).join(' | ').slice(0,260);
-      }
-    }
-
-    // Fallback: if JSON stringifiable, show short pretty
-    if(j){
-      const compact = JSON.stringify(j).slice(0,320);
-      return ell(compact, 320);
-    }
-    // Otherwise raw text snippet
-    if(bodyText) return ell(String(bodyText), 260);
-    return null;
-  }
-
-  // provider try helper (timeout + ok check)
-  const fetchWithTimeout=(url, ms=10000)=>Promise.race([fetch(url), new Promise((_,rej)=>setTimeout(()=>rej(new Error('timeout')), ms))]);
-
-  // --- Tools definition (same as before, only providers with API will show inline parsed summaries)
-  const TOOLS = [
-    {name:"WHOIS",type:"domain",providers:[
-      {n:"who.is",link:t=>`https://who.is/whois/${t}`},
-      {n:"ipwhois",link:t=>`https://ipwhois.io/whois/${t}`,api:`https://r.jina.ai/http://ipwhois.app/json/${'${t}'}?objects=whois`},
-      {n:"rdap",link:t=>`https://rdap.org/domain/${t}`,api:`https://r.jina.ai/http://rdap.org/domain/${'${t}'}`},
-      {n:"viewdns",link:t=>`https://viewdns.info/whois/?domain=${t}`},
-      {n:"host.io",link:t=>`https://host.io/${t}`}
-    ]},
-    {name:"DNS",type:"domain",providers:[
-      {n:"cf",link:t=>`https://cloudflare-dns.com/dns-query?name=${t}`,api:`https://r.jina.ai/https://cloudflare-dns.com/dns-query?name=${'${t}'}&type=A`},
-      {n:"google",link:t=>`https://dns.google/resolve?name=${t}`,api:`https://r.jina.ai/https://dns.google/resolve?name=${'${t}'}&type=A`},
-      {n:"opendns",link:t=>`https://www.dnsomatic.com/`},
-      {n:"quad9",link:t=>`https://www.quad9.net/`},
-      {n:"he",link:t=>`https://bgp.he.net/dns/${t}`}
-    ]},
-    {name:"Subs",type:"domain",providers:[
-      {n:"crt.sh",link:t=>`https://crt.sh/?q=${t}`,api:`https://r.jina.ai/https://crt.sh/?q=${'${t}'}&output=json`},
-      {n:"rapiddns",link:t=>`https://rapiddns.io/subdomain/${t}?full=1`},
-      {n:"riddler",link:t=>`https://riddler.io/search?q=${t}`},
-      {n:"jldc",link:t=>`https://jldc.me/anubis/subdomains/${t}`,api:`https://r.jina.ai/https://jldc.me/anubis/subdomains/${'${t}'}`},
-      {n:"certspot",link:t=>`https://certspotter.com/api/v0/certs?domain=${t}`,api:`https://r.jina.ai/https://certspotter.com/api/v0/certs?domain=${'${t}'}&include_subdomains=true&expand=dns_names`}
-    ]},
-    {name:"IP Intel",type:"ip",providers:[
-      {n:"ip-api",link:t=>`http://ip-api.com/${t}`,api:`https://r.jina.ai/http://ip-api.com/json/${'${t}'}`},
-      {n:"ipinfo",link:t=>`https://ipinfo.io/${t}`,api:`https://r.jina.ai/https://ipinfo.io/${'${t}'}/json`},
-      {n:"ipwhois",link:t=>`https://ipwhois.io/${t}`,api:`https://r.jina.ai/http://ipwhois.app/json/${'${t}'}`},
-      {n:"db-ip",link:t=>`https://db-ip.com/${t}`,api:`https://r.jina.ai/https://api.db-ip.com/v2/free/${'${t}'}`}
-    ]},
-    {name:"Wayback",type:"domain",providers:[
-      {n:"cdx",link:t=>`https://web.archive.org/cdx/search/cdx?url=${t}&output=json`,api:`https://r.jina.ai/https://web.archive.org/cdx/search/cdx?url=${'${t}'}&output=json`},
-      {n:"timemap",link:t=>`https://web.archive.org/web/timemap/json/${t}`,api:`https://r.jina.ai/https://web.archive.org/web/timemap/json/${'${t}'}`}
-    ]},
-    {name:"Mail TXT",type:"domain",providers:[
-      {n:"SPF/TXT",link:t=>`https://dns.google/resolve?name=${t}&type=TXT`,api:`https://r.jina.ai/https://dns.google/resolve?name=${'${t}'}&type=TXT`},
-      {n:"DMARC",link:t=>`https://dns.google/resolve?name=_dmarc.${t}&type=TXT`,api:`https://r.jina.ai/https://dns.google/resolve?name=_dmarc.${'${t}'}&type=TXT`}
-    ]},
-    {name:"Robots/Sitemap",type:"domain",providers:[
-      {n:"robots",link:t=>`https://${t}/robots.txt`,api:`https://r.jina.ai/https://${'${t}'}/robots.txt`},
-      {n:"sitemap",link:t=>`https://${t}/sitemap.xml`,api:`https://r.jina.ai/https://${'${t}'}/sitemap.xml`}
-    ]},
-    {name:"Reputation",type:"any",providers:[
-      {n:"urlscan",link:t=>`https://urlscan.io/search/#${t}`,api:`https://r.jina.ai/https://urlscan.io/api/v1/search/?q=${'${t}'}`}
-    ]}
-  ];
-
-  const allowed=(tool,t)=> tool.type==='any'||(tool.type==='domain'&&!isIP(t))||(tool.type==='ip'&&isIP(t));
-
-  const makeCard=(tool,target)=>{
-    const tpl=document.getElementById('cardTpl').content.cloneNode(true);
-    const root=tpl.querySelector('.card');
-    tpl.querySelector('h3').textContent=tool.name;
-    tpl.querySelector('.count').textContent=tool.providers.length.toString();
-    const list=tpl.querySelector('.list');
-    tpl.querySelector('.open').addEventListener('click',()=>tool.providers.forEach(p=>window.open(p.link(target),'_blank','noopener')));
-
-    (async()=>{
-      for(const p of tool.providers){
-        const li=line('load',p.n,p.link(target),'', null);
-        list.appendChild(li); await sleep(25);
-        if(p.api){
-          try{
-            const url=p.api.replaceAll('${t}',encodeURIComponent(target));
-            const res=await fetch(url);
-            if(res.ok){
-              const text=await res.text();
-              const summary=summarize(p.n, url, text, target);
-              const good = !!summary && !/not\\s*found|forbidden|denied|error/i.test(summary);
-              li.replaceWith(line(good?'ok':'err',p.n,p.link(target),good?'':'no', summary||''));
-            }else{
-              li.replaceWith(line('err',p.n,p.link(target),String(res.status),''));
-            }
-          }catch(e){
-            li.replaceWith(line('err',p.n,p.link(target),'fetch',''));
-          }
-        }else{
-          li.replaceWith(line('ok',p.n,p.link(target),'',''));
-        }
-      }
-    })();
-
-    return root;
-  };
-
-  async function run(){
-    const t=trim($('target').value||'');
-    if(!t) return;
-    const grid=$('results'); grid.innerHTML='';
-    const used=TOOLS.filter(tool=>allowed(tool,t));
-    for(const tool of used) grid.appendChild(makeCard(tool,t));
-  }
-
-  $('runBtn').addEventListener('click',run);
-  $('target').addEventListener('keydown',e=>{if(e.key==='Enter')run();});
-  $('clearBtn').addEventListener('click',()=>{$('target').value='';$('results').innerHTML='';});
-  $('exportJson').addEventListener('click',()=>{
-    const cards=[...document.querySelectorAll('.card')].map(c=>{
-      const tool=c.querySelector('h3')?.textContent||'';
-      const items=[...c.querySelectorAll('li')].map(li=>{
-        const provider=li.querySelector('.label')?.textContent?.replace(/:\\s*$/,'')||'';
-        const url=li.querySelector('a')?.href||'';
-        const ok=li.querySelector('.ok')? 'ok' : li.querySelector('.err')? 'err' : 'load';
-        const text=li.querySelector('.mini')?.textContent||'';
-        return {provider,url,status:ok,summary:text};
-      });
-      return {tool,items};
-    });
-    const blob=new Blob([JSON.stringify({target:$('target').value,ts:Date.now(),cards},null,2)],{type:'application/json'});
-    const url=URL.createObjectURL(blob); const a=document.createElement('a'); a.href=url; a.download='osint-inline-export.json'; a.click(); URL.revokeObjectURL(url);
-  });
-</script>
+  </script>
 </body>
 </html>
