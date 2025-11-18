@@ -5,7 +5,77 @@
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>OSINT Lookup Dashboard</title>
   <!-- Tailwind (CDN) -->
-  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://cdn.tailwindcss.com">  function csvDownload(filename, rows){
+      const csv = rows.map(r=> r.map(x => '"'+String(x).replaceAll('"','""')+'"').join(',')).join('
+');
+      const blob = new Blob([csv], {type:'text/csv'});
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a'); a.href=url; a.download=filename; a.click(); URL.revokeObjectURL(url);
+    }
+
+    let currentSubs = [];
+    let sortAsc = { sub:true, ip:true };
+
+    function renderSubsTable(list){
+      currentSubs = list;
+      const tbody = sel('subsTbody');
+      if(!list.length){ tbody.innerHTML = '<tr><td class="px-3 py-2" colspan="2">No results (or rate limited).</td></tr>'; return; }
+      tbody.innerHTML = list.map(({host, ip})=>`<tr class="even:bg-slate-900/40"><td class="px-3 py-2"><a class="underline" target="_blank" rel="noreferrer noopener" href="https://${host}">${host}</a></td><td class="px-3 py-2 mono">${ip||'N/A'}</td></tr>`).join('');
+    }
+
+    async function resolveA(host){
+      const j = await fetchJSON(`https://dns.google/resolve?name=${host}&type=A`).catch(()=>null);
+      const ip = j?.Answer?.[0]?.data || null; return ip;
+    }
+
+    function dedupe(arr){ return Array.from(new Set(arr)).sort(); }
+
+    function makeCommonPrefixes(domain){
+      const prefixes = ['www','mail','smtp','imap','pop','autodiscover','msoid','enterpriseenrollment','enterpriseregistration','vpn','vpn2','dev','test','stage','staging','qa','api','api-field','field','field-test','portal','help','helpdesk','support','hr','connect','one','admin','ldap','sip','sso','status','tv','cdn','assets','files','filedrop','git','gitlab','grafana','kibana','jira','confluence','terraform'];
+      return prefixes.map(p=>`${p}.${domain}`);
+    }
+
+    async function buildSubs(domain, baseSubs){
+      let all = baseSubs;
+      if(sel('deepScan').checked){
+        all = all.concat(makeCommonPrefixes(domain));
+      }
+      all = dedupe(all.filter(h=>h.endsWith('.'+domain)));
+      // resolve in small batches to avoid rate limits
+      const batch=10; const out=[];
+      for(let i=0;i<all.length;i+=batch){
+        const slice = all.slice(i,i+batch);
+        const ips = await Promise.all(slice.map(h=>resolveA(h)));
+        slice.forEach((h,idx)=> out.push({host:h, ip: ips[idx]}));
+      }
+      return out;
+    }
+
+    function sortAndRender(by){
+      const key = by==='ip'?'ip':'host';
+      sortAsc[by] = !sortAsc[by];
+      const list = [...currentSubs].sort((a,b)=>{
+        const A=(a[key]||''); const B=(b[key]||'');
+        return (A>B?1:A<B?-1:0) * (sortAsc[by]?1:-1);
+      });
+      sel('thSub').innerHTML = `Subdomain ${by==='host'&&(sortAsc[by]?'▲':'▼')}`;
+      sel('thIP').innerHTML = `IP Address ${by==='ip'&&(sortAsc[by]?'▲':'▼')}`;
+      renderSubsTable(list);
+    }
+
+    sel('thSub').addEventListener('click', ()=>sortAndRender('host'));
+    sel('thIP').addEventListener('click', ()=>sortAndRender('ip'));
+    sel('exportSubs').addEventListener('click', ()=>{
+      const rows = [['Subdomain','IP Address']].concat(currentSubs.map(r=>[r.host, r.ip||'']));
+      csvDownload('subdomains.csv', rows);
+    });
+
+    // hook deepScan change to rerun when toggled
+    sel('deepScan').addEventListener('change', run);
+
+  </script>
+</body>
+</html>
   <style>
     :root{color-scheme:dark light}
     .card{ @apply bg-slate-900/70 border border-slate-800 rounded-2xl p-4 shadow-lg;} /* Tailwind JIT won't parse @apply in inline <style> in CDN, so do plain CSS: */
@@ -59,8 +129,26 @@
       </div>
 
       <div class="glass p-4">
-        <div class="title">Subdomains (crt.sh)</div>
-        <div class="text-xs mt-2">Certificate Transparency enumeration via crt.sh (deduped & filtered). Rate-limited; results may be partial.</div>
+        <div class="title flex items-center justify-between">
+          <span>Subdomains (CT + passive DNS)</span>
+          <div class="flex items-center gap-2 text-xs">
+            <label class="flex items-center gap-1"><input id="deepScan" type="checkbox" class="accent-emerald-500"> Deep scan (common prefixes)</label>
+            <button id="exportSubs" class="px-2 py-1 rounded-lg bg-slate-800 border border-slate-700">Export CSV</button>
+          </div>
+        </div>
+        <div class="text-xs mt-2">Certificate Transparency via crt.sh plus optional resolution of common prefixes that may not appear in CT (e.g., non‑TLS services). Click column headers to sort.</div>
+        <div class="mt-3 max-h-80 overflow-auto border border-slate-800 rounded-lg">
+          <table class="w-full text-xs">
+            <thead class="bg-slate-900 sticky top-0">
+              <tr>
+                <th id="thSub" class="text-left px-3 py-2 cursor-pointer">Subdomain ▲</th>
+                <th id="thIP" class="text-left px-3 py-2 cursor-pointer">IP Address</th>
+              </tr>
+            </thead>
+            <tbody id="subsTbody"></tbody>
+          </table>
+        </div>
+      </div>
         <ul id="subs" class="mt-3 text-xs space-y-1 max-h-72 overflow-auto"></ul>
       </div>
 
@@ -196,7 +284,7 @@
       const set = new Set();
       names.join('\n').split(/\n/).forEach(n=>{ n=n.trim(); if(n && !n.includes(' ')) set.add(n.replace(/\*\./g,'')); });
       const subs = Array.from(set).filter(s=>s.endsWith('.'+domain));
-      sel('subs').innerHTML = subs.length? subs.slice(0,500).map(s=>`<li><a class="underline" target="_blank" rel="noreferrer noopener" href="https://${s}">${s}</a></li>`).join('') : '<li>No results (or rate limited).</li>';
+      renderSubsTable(subs);
 
       // Wayback snapshots (CDX API)
       const wb = await fetch(`https://web.archive.org/cdx/search/cdx?url=${encodeURIComponent(domain)}&output=json&fl=timestamp,original&collapse=timestamp:8&limit=20`).then(r=>r.json()).catch(()=>null);
