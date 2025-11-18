@@ -271,22 +271,66 @@
       const dmarcTXT = dmarcRes?.Answer?.map(a=>a.data.replace(/^"|"$/g,'')) || [];
       sel('mail').textContent = fmt({ SPF: spf, DMARC: dmarcTXT });
 
-      // Subdomains via crt.sh (Certificate Transparency). Use allorigins to bypass CORS.
-      const crtUrl = `https://crt.sh/?q=%25.${domain}&output=json`;
-      const crt = await fetchJSON(`https://api.allorigins.win/raw?url=${encodeURIComponent(crtUrl)}`).catch(()=>null);
-      let names=[];
-      if(crt){
-        try{
-          // crt.sh can return an array or multi-JSON separated by newlines; normalize.
-          names = Array.isArray(crt)? crt.map(r=>r.name_value) : [];
-        }catch(e){ names=[] }
+      // Subdomains from multiple passive sources (CRT, Bufferover, Sonar)
+      const clean = (h)=> h.replace(/^\*\./,'').trim();
+
+      async function fetchSubdomainsCRT(domain){
+        const url = `https://crt.sh/?q=%25.${domain}&output=json`;
+        const data = await fetchJSON(`https://api.allorigins.win/raw?url=${encodeURIComponent(url)}`).catch(()=>null);
+        if(!data) return [];
+        try{ return (Array.isArray(data)? data: []).flatMap(r=> String(r.name_value||'').split(/\n/).map(clean)); }catch{ return []; }
       }
-      const set = new Set();
-      names.join('\n').split(/\n/).forEach(n=>{ n=n.trim(); if(n && !n.includes(' ')) set.add(n.replace(/\*\./g,'')); });
-      const subs = Array.from(set).filter(s=>s.endsWith('.'+domain));
-      renderSubsTable(subs);
+
+      async function fetchSubdomainsBufferover(domain){
+        // FDNS_A returns lines like "IP,host"; TLS returns hostnames; both are great passive sources
+        const boDNS = await fetchJSON(`https://dns.bufferover.run/dns?q=.${domain}`).catch(()=>null);
+        const boTLS = await fetchJSON(`https://tls.bufferover.run/dns?q=.${domain}`).catch(()=>null);
+        const ipMap = new Map();
+        const subs1 = (boDNS?.FDNS_A||[]).map(line=>{
+          const [ip,host] = String(line).split(','); if(host){ ipMap.set(clean(host), ip); }
+          return clean(host||'');
+        }).filter(Boolean);
+        const subs2 = (boDNS?.RDNS||[]).map(line=> String(line).split(',')[1]).filter(Boolean).map(clean);
+        const subs3 = (boTLS?.Results||[]).map(line=> String(line).split(',')[1]||String(line)).map(clean);
+        return { subs: subs1.concat(subs2, subs3), ipMap };
+      }
+
+      async function fetchSubdomainsSonar(domain){
+        // Rapid7 Sonar mirror (community) often CORS-enabled
+        const list = await fetchJSON(`https://sonar.omnisint.io/subdomains/${domain}`).catch(()=>null);
+        return Array.isArray(list)? list.map(clean) : [];
+      }
+
+      // gather from all sources in parallel
+      const [crtList, boRes, sonarList] = await Promise.all([
+        fetchSubdomainsCRT(domain),
+        fetchSubdomainsBufferover(domain),
+        fetchSubdomainsSonar(domain)
+      ]);
+      const passiveMap = boRes?.ipMap || new Map();
+      let baseSubs = [].concat(crtList, boRes?.subs||[], sonarList)
+        .filter(h=> h && h.endsWith('.'+domain));
+      baseSubs = Array.from(new Set(baseSubs));
+
+      // build full table; use passiveMap IPs when available to reduce DNS lookups
+      async function buildSubsWithPassive(domain, baseSubs, ipMap){
+        let all = baseSubs;
+        if(sel('deepScan').checked){ all = all.concat(makeCommonPrefixes(domain)); }
+        all = Array.from(new Set(all.filter(h=>h.endsWith('.'+domain))));
+        const batch=10; const out=[];
+        for(let i=0;i<all.length;i+=batch){
+          const slice = all.slice(i,i+batch);
+          const ips = await Promise.all(slice.map(h=> ipMap.get(h) || resolveA(h)));
+          slice.forEach((h,idx)=> out.push({host:h, ip: ips[idx]||null}));
+        }
+        return out;
+      }
+
+      const subsRows = await buildSubsWithPassive(domain, baseSubs, passiveMap);
+      renderSubsTable(subsRows);
 
       // Wayback snapshots (CDX API)
+
       const wb = await fetch(`https://web.archive.org/cdx/search/cdx?url=${encodeURIComponent(domain)}&output=json&fl=timestamp,original&collapse=timestamp:8&limit=20`).then(r=>r.json()).catch(()=>null);
       const wbList = Array.isArray(wb)? wb.slice(1).map(([ts,orig])=>({ts,orig})) : [];
       sel('wayback').innerHTML = wbList.length? wbList.map(({ts,orig})=>{
