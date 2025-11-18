@@ -1,0 +1,231 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>OSINT Lookup Dashboard</title>
+  <!-- Tailwind (CDN) -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <style>
+    :root{color-scheme:dark light}
+    .card{ @apply bg-slate-900/70 border border-slate-800 rounded-2xl p-4 shadow-lg;} /* Tailwind JIT won't parse @apply in inline <style> in CDN, so do plain CSS: */
+    .glass{ background: rgba(15,23,42,.75); border:1px solid rgba(51,65,85,.6); box-shadow:0 8px 30px rgba(0,0,0,.25); border-radius:1rem; }
+    .title{ font-weight:700; font-size:1.4rem; letter-spacing:.2px }
+    .mono{ font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace }
+    .pill{ display:inline-flex; align-items:center; gap:.4rem; padding:.25rem .6rem; border-radius:9999px; border:1px solid rgba(148,163,184,.25); font-size:.75rem }
+    .badge{ padding:.15rem .5rem; background:#0f172a; border:1px solid #334155; border-radius:.5rem }
+    pre{ white-space: pre-wrap; }
+  </style>
+</head>
+<body class="min-h-screen bg-slate-950 text-slate-100">
+  <header class="sticky top-0 z-20 bg-emerald-500 text-slate-900 py-3 shadow">
+    <div class="max-w-6xl mx-auto px-3 flex items-center justify-between">
+      <h1 class="text-xl font-semibold tracking-tight">OSINT Lookup Dashboard</h1>
+      <a class="underline text-sm" href="https://github.com/" target="_blank" rel="noreferrer noopener">Free tools only</a>
+    </div>
+  </header>
+
+  <main class="max-w-6xl mx-auto px-3 py-6">
+    <!-- Search Bar -->
+    <div class="flex items-center gap-2 mb-6">
+      <input id="domainInput" class="w-full bg-slate-900 border border-slate-700 rounded-xl px-4 py-2 outline-none focus:ring-2 focus:ring-emerald-400" placeholder="Enter domain or URL (e.g., https://example.com)" />
+      <button id="runBtn" class="px-4 py-2 rounded-xl bg-emerald-500 text-slate-900 font-semibold hover:bg-emerald-400">Run</button>
+    </div>
+
+    <!-- Quick Links / Pills -->
+    <div id="quickLinks" class="flex flex-wrap gap-2 mb-6 text-slate-200 text-sm"></div>
+
+    <!-- Grid -->
+    <section class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+      <div class="glass p-4">
+        <div class="title">Reputation & Hosting <span class="badge" id="hostBadge">Waiting…</span></div>
+        <div id="reputation" class="mt-3 text-sm">
+          <div>IP: <span id="ipVal" class="mono">—</span></div>
+          <div>Org/ASN: <span id="asnVal">—</span></div>
+          <div>Country/City: <span id="geoVal">—</span></div>
+          <div class="mt-2">Pulsedive (threat intel): <span id="pulsedive" class="mono">—</span></div>
+          <div class="mt-2">Blacklist quick-links: <span id="blLinks"></span></div>
+        </div>
+      </div>
+
+      <div class="glass p-4">
+        <div class="title">WHOIS / RDAP</div>
+        <pre id="rdap" class="mt-3 text-xs bg-slate-950/60 p-3 rounded-lg border border-slate-800">Waiting…</pre>
+      </div>
+
+      <div class="glass p-4">
+        <div class="title">DNS Records</div>
+        <pre id="dns" class="mt-3 text-xs bg-slate-950/60 p-3 rounded-lg border border-slate-800">Waiting…</pre>
+      </div>
+
+      <div class="glass p-4">
+        <div class="title">Subdomains (crt.sh)</div>
+        <div class="text-xs mt-2">Certificate Transparency enumeration via crt.sh (deduped & filtered). Rate-limited; results may be partial.</div>
+        <ul id="subs" class="mt-3 text-xs space-y-1 max-h-72 overflow-auto"></ul>
+      </div>
+
+      <div class="glass p-4">
+        <div class="title">Mail TXT / SPF / DMARC</div>
+        <pre id="mail" class="mt-3 text-xs bg-slate-950/60 p-3 rounded-lg border border-slate-800">Waiting…</pre>
+      </div>
+
+      <div class="glass p-4">
+        <div class="title">Wayback Snapshots</div>
+        <ul id="wayback" class="mt-3 text-xs space-y-1 max-h-72 overflow-auto"></ul>
+      </div>
+
+      <div class="glass p-4 md:col-span-2 lg:col-span-3">
+        <div class="title flex items-center gap-3">Site Logo & Reverse Image</div>
+        <div class="flex items-center gap-4 mt-3">
+          <img id="logo" src="" alt="site logo" class="w-12 h-12 rounded-lg border border-slate-800 bg-slate-900" onerror="this.src='https://www.google.com/s2/favicons?domain=example.com&sz=128'"/>
+          <div class="text-sm">
+            <div>Logo URL: <a id="logoUrl" class="underline" target="_blank" rel="noreferrer noopener">open</a></div>
+            <div class="mt-2 flex flex-wrap gap-2">
+              <a id="gImg" class="pill" target="_blank" rel="noreferrer noopener">Google Images</a>
+              <a id="tineye" class="pill" target="_blank" rel="noreferrer noopener">TinEye</a>
+              <a id="yandex" class="pill" target="_blank" rel="noreferrer noopener">Yandex</a>
+              <a id="bing" class="pill" target="_blank" rel="noreferrer noopener">Bing Images</a>
+            </div>
+          </div>
+        </div>
+      </div>
+
+    </section>
+
+    <p class="text-xs text-slate-400 mt-6">All data pulled from free, public endpoints (dns.google, ip-api.com, rdap.org, crt.sh via allorigins, Internet Archive CDX, Pulsedive where available). CORS wrappers used where needed. Results are best-effort and subject to rate limits.</p>
+  </main>
+
+  <script>
+    const sel = (id)=>document.getElementById(id);
+    const fmt = (o)=>JSON.stringify(o, null, 2);
+
+    function normalizeDomain(input){
+      try{
+        // strip scheme/path
+        const url = new URL(input.includes('://')? input : 'http://' + input);
+        return url.hostname.replace(/^www\./,'');
+      }catch(e){
+        return input.trim().replace(/^https?:\/\//,'').replace(/\/.*/, '').replace(/^www\./,'');
+      }
+    }
+
+    function setQuickLinks(domain){
+      const links = [
+        {label:'Open site', href:`https://${domain}`},
+        {label:'Security Headers', href:`https://securityheaders.com/?q=${domain}&followRedirects=on`},
+        {label:'DNSViz', href:`https://dnsviz.net/d/${domain}/dnssec/`},
+        {label:'MXToolbox', href:`https://mxtoolbox.com/SuperTool.aspx?action=mx%3a${domain}`},
+        {label:'crt.sh', href:`https://crt.sh/?q=%25.${domain}`},
+        {label:'Censys (search)', href:`https://search.censys.io/search?resource=hosts&q=${domain}`},
+        {label:'Shodan (search)', href:`https://www.shodan.io/search?query=${domain}`},
+      ];
+      sel('quickLinks').innerHTML = links.map(l=>`<a class="pill" target="_blank" rel="noreferrer noopener" href="${l.href}">${l.label}</a>`).join('');
+    }
+
+    async function fetchJSON(url){
+      const res = await fetch(url);
+      if(!res.ok) throw new Error('HTTP '+res.status);
+      return res.json();
+    }
+
+    async function run(){
+      const raw = sel('domainInput').value.trim();
+      if(!raw) return;
+      const domain = normalizeDomain(raw);
+      setQuickLinks(domain);
+
+      // Logo (Clearbit fallback -> Google s2)
+      const logoUrl = `https://logo.clearbit.com/${domain}`;
+      sel('logo').src = logoUrl;
+      sel('logoUrl').href = logoUrl; sel('logoUrl').textContent = logoUrl;
+      const encLogo = encodeURIComponent(logoUrl);
+      sel('gImg').href = `https://www.google.com/searchbyimage?image_url=${encLogo}`;
+      sel('tineye').href = `https://tineye.com/search?url=${encLogo}`;
+      sel('yandex').href = `https://yandex.com/images/search?rpt=imageview&url=${encLogo}`;
+      sel('bing').href = `https://www.bing.com/images/search?q=imgurl:${encLogo}&view=detailv2`;
+
+      // DNS A/AAAA/MX/TXT via Google DoH
+      const dnsA = await fetchJSON(`https://dns.google/resolve?name=${domain}&type=A`).catch(()=>null);
+      const dnsAAAA = await fetchJSON(`https://dns.google/resolve?name=${domain}&type=AAAA`).catch(()=>null);
+      const mx = await fetchJSON(`https://dns.google/resolve?name=${domain}&type=MX`).catch(()=>null);
+      const txt = await fetchJSON(`https://dns.google/resolve?name=${domain}&type=TXT`).catch(()=>null);
+
+      const A = dnsA?.Answer?.map(a=>a.data) || [];
+      const AAAA = dnsAAAA?.Answer?.map(a=>a.data) || [];
+      const MX = mx?.Answer?.map(a=>a.data) || [];
+      const TXT = txt?.Answer?.map(a=>a.data) || [];
+      sel('dns').textContent = fmt({A, AAAA, MX, TXT});
+
+      // Basic IP/ASN/Geo using ip-api.com (best-effort)
+      let ip = A[0] || '';
+      if(ip){
+        const ipinfo = await fetchJSON(`http://ip-api.com/json/${domain}?fields=status,message,query,continent,country,city,org,as,asname,isp,proxy,hosting&lang=en`).catch(()=>null);
+        if(ipinfo?.status==='success'){
+          sel('ipVal').textContent = ipinfo.query;
+          sel('asnVal').textContent = `${ipinfo.asname || ipinfo.as || ipinfo.org || ''}`;
+          sel('geoVal').textContent = `${ipinfo.country || ''}${ipinfo.city? ', '+ipinfo.city:''}`;
+          sel('hostBadge').textContent = ipinfo.hosting? 'Hosting':'—';
+        } else {
+          sel('ipVal').textContent = ip || '—';
+        }
+      } else {
+        sel('ipVal').textContent = '—';
+      }
+
+      // RDAP
+      const rdap = await fetchJSON(`https://rdap.org/domain/${domain}`).catch(()=>null);
+      sel('rdap').textContent = rdap? fmt({handle: rdap.handle, ldhName: rdap.ldhName, registrar: rdap?.entities?.find(e=>e.roles?.includes('registrar'))?.vcardArray?.[1]?.find(v=>v[0]==='fn')?.[3], status: rdap.status, events: rdap.events}) : 'Unavailable (RDAP/CORS)';
+
+      // Mail TXT/SPF/DMARC quick parse
+      const spf = (TXT||[]).map(s=>s.replace(/^"|"$/g,'')).filter(s=>/v=spf1/i.test(s));
+      // DMARC exists under _dmarc.domain TXT
+      const dmarcRes = await fetchJSON(`https://dns.google/resolve?name=_dmarc.${domain}&type=TXT`).catch(()=>null);
+      const dmarcTXT = dmarcRes?.Answer?.map(a=>a.data.replace(/^"|"$/g,'')) || [];
+      sel('mail').textContent = fmt({ SPF: spf, DMARC: dmarcTXT });
+
+      // Subdomains via crt.sh (Certificate Transparency). Use allorigins to bypass CORS.
+      const crtUrl = `https://crt.sh/?q=%25.${domain}&output=json`;
+      const crt = await fetchJSON(`https://api.allorigins.win/raw?url=${encodeURIComponent(crtUrl)}`).catch(()=>null);
+      let names=[];
+      if(crt){
+        try{
+          // crt.sh can return an array or multi-JSON separated by newlines; normalize.
+          names = Array.isArray(crt)? crt.map(r=>r.name_value) : [];
+        }catch(e){ names=[] }
+      }
+      const set = new Set();
+      names.join('\n').split(/\n/).forEach(n=>{ n=n.trim(); if(n && !n.includes(' ')) set.add(n.replace(/\*\./g,'')); });
+      const subs = Array.from(set).filter(s=>s.endsWith('.'+domain));
+      sel('subs').innerHTML = subs.length? subs.slice(0,500).map(s=>`<li><a class="underline" target="_blank" rel="noreferrer noopener" href="https://${s}">${s}</a></li>`).join('') : '<li>No results (or rate limited).</li>';
+
+      // Wayback snapshots (CDX API)
+      const wb = await fetch(`https://web.archive.org/cdx/search/cdx?url=${encodeURIComponent(domain)}&output=json&fl=timestamp,original&collapse=timestamp:8&limit=20`).then(r=>r.json()).catch(()=>null);
+      const wbList = Array.isArray(wb)? wb.slice(1).map(([ts,orig])=>({ts,orig})) : [];
+      sel('wayback').innerHTML = wbList.length? wbList.map(({ts,orig})=>{
+        const y=ts.slice(0,4), m=ts.slice(4,6), d=ts.slice(6,8);
+        const url=`https://web.archive.org/web/${ts}/${orig}`;
+        return `<li><a class="underline" href="${url}" target="_blank" rel="noreferrer noopener">${y}-${m}-${d}</a> – <span class="mono">${orig}</span></li>`;
+      }).join('') : '<li>No snapshots found.</li>';
+
+      // Pulsedive (basic indicator lookup – may rate limit). If blocked, show link.
+      const pdUrl = `https://pulsedive.com/api/info.php?indicator=${encodeURIComponent(domain)}`;
+      const pd = await fetchJSON(pdUrl).catch(()=>null);
+      if(pd && (pd.severity || pd.risk)){
+        sel('pulsedive').textContent = `${pd.severity || pd.risk} (risk)`;
+      } else {
+        sel('pulsedive').innerHTML = `Unavailable – <a class="underline" target="_blank" rel="noreferrer noopener" href="https://pulsedive.com/indicator/?iid=${encodeURIComponent(domain)}">Open on Pulsedive</a>`;
+      }
+
+      // Blacklist quick-links
+      sel('blLinks').innerHTML = [
+        {n:'Talos', u:`https://talosintelligence.com/reputation_center/lookup?search=${domain}`},
+        {n:'ThreatMiner', u:`https://www.threatminer.org/domain.php?q=${domain}`},
+        {n:'URLHaus', u:`https://urlhaus.abuse.ch/browse/host/${domain}/`},
+      ].map(x=>`<a class="underline" target="_blank" rel="noreferrer noopener" href="${x.u}">${x.n}</a>`).join(' · ');
+    }
+
+    sel('runBtn').addEventListener('click', run);
+    sel('domainInput').addEventListener('keydown', (e)=>{ if(e.key==='Enter') run(); });
+  </script>
+</body>
+</html>
